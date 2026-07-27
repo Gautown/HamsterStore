@@ -1,0 +1,38 @@
+{
+  "音频与视频": [
+    "audio", "video", "music", "player", "ffmpeg", "mp3", "mp4", "sound", "media",
+    "stream", "playback", "radio", "podcast", "youtube", "playlist"
+  ],
+  "办公PDF": [
+    "pdf", "office", "excel", "word", "ppt", "document", "spreadsheet", "presentation",
+    "ocr", "docx", "xlsx", "pptx", "text", "editor", "viewer"
+  ],
+  "教育学习": [
+    "learn", "education", "study", "course", "book", "tutorial", "knowledge",
+    "school", "university", "math", "algorithm", "training", "teach"
+  ],
+  "游戏": [
+    "game", "gaming", "engine", "emulator", "rom", "minecraft", "steam", "play",
+    "unity", "unreal", "mod", "arcade", "rpg", "fps"
+  ],
+  "图形图像（设计类）": [
+    "image", "photo", "design", "graphics", "drawing", "paint", "svg", "canvas",
+    "3d", "render", "photoshop", "illustrator", "icon", "wallpaper"
+  ],
+  "网络工具": [
+    "network", "proxy", "vpn", "dns", "http", "tcp", "ip", "scan", "monitor",
+    "router", "firewall", "networking", "speedtest", "wifi"
+  ],
+  "安全隐私": [
+    "security", "privacy", "encryption", "password", "antivirus", "firewall",
+    "crypto", "vpn", "secure", "protect", "backup", "auth"
+  ],
+  "系统工具": [
+    "system", "utility", "tool", "monitor", "backup", "restore", "cleaner",
+    "disk", "cpu", "memory", "process", "service", "driver"
+  ],
+  "实用工具": [
+    "utility", "tool", "helper", "cli", "command", "script", "automation",
+    "converter", "manager", "utils", "batch", "quick"
+  ]
+}

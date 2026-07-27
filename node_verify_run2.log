@@ -1,0 +1,17 @@
+[2026-07-21 08:32:01] [INFO] [db] 数据库初始化完成: C:\Users\GauTown\.hamsterstore\store.db
+[2026-07-21 08:32:01] [INFO] [main] ========================================
+[2026-07-21 08:32:01] [INFO] [main]    HamsterStore Node.js 验证模式
+[2026-07-21 08:32:01] [INFO] [main]    （已跳过 perry/thread 爬虫/下载模块）
+[2026-07-21 08:32:01] [INFO] [main] ========================================
+[2026-07-21 08:32:01] [INFO] [proxy] 加载加速节点: hub.fastgit.xyz,ghproxy.com,mirror.ghproxy.com
+(node:18464) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[2026-07-21 08:32:01] [INFO] [proxy] 加速代理启动 端口 5679
+[2026-07-21 08:32:01] [WARN] [proxy] 后台测速启动失败（Node.js fallback，使用静态节点）: (0 , import_thread.spawn) is not a function
+[2026-07-21 08:32:01] [INFO] [api] API服务启动 端口 5678
+[2026-07-21 08:32:01] [INFO] [main] 全部核心服务启动完成
+[2026-07-21 08:32:01] [INFO] [main] 代理端口: 5679  API端口: 5678
+[2026-07-21 08:32:01] [INFO] [main] Web 访问: http://127.0.0.1:5678
+[2026-07-21 08:32:01] [INFO] [main] 系统代理: 127.0.0.1:5679
+[2026-07-21 08:32:01] [INFO] [main] ========================================
+[2026-07-21 08:32:01] [INFO] [main] 服务运行中，按 Ctrl+C 退出

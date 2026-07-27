@@ -1,0 +1,8 @@
+{
+  "GITHUB_TOKEN": "",
+  "CRAWL_CONCURRENCY": "5",
+  "CRAWL_SCHEDULE": "0 */6 * * *",
+  "PROXY_PORT": "",
+  "API_PORT": "5678",
+  "DOWNLOAD_DIR": ""
+}

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HamsterStore 仓鼠软库</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="logo">
+        <h1>HamsterStore 仓鼠软库</h1>
+        <p>GitHub 开源项目 · 自动聚合 · 加速代理 · 多线程下载</p>
+      </div>
+    </header>
+
+    <div class="search-bar">
+      <input 
+        type="text" 
+        id="search-input" 
+        placeholder="搜索软件/项目名称、描述、关键词..."
+        onkeydown="if(event.key==='Enter')doSearch()"
+      >
+      <button id="search-btn" onclick="doSearch()">搜索项目</button>
+    </div>
+
+    <div class="main-content">
+      <aside class="sidebar">
+        <h3>项目分类</h3>
+        <div id="category-list" class="category-list"></div>
+      </aside>
+
+      <main class="content">
+        <h3 id="content-title">全部项目</h3>
+        <div id="repo-list" class="repo-list"></div>
+      </main>
+    </div>
+  </div>
+  <script src="/js/app.js"></script>
+</body>
+</html>

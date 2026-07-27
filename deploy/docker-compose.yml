@@ -1,0 +1,16 @@
+version: "3.8"
+services:
+  hamsterstore:
+    build: .
+    container_name: hamsterstore
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./data:/root/.hamsterstore
+      - ./downloads:/root/Downloads/HamsterStore
+    environment:
+      - TZ=Asia/Shanghai
+      - API_PORT=5678
+      - GITHUB_TOKEN=your_github_token_here
+      - LOG_LEVEL=INFO

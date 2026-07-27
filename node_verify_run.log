@@ -1,0 +1,10 @@
+[2026-07-21 08:30:26] [INFO] [db] 数据库初始化完成: C:\Users\GauTown\.hamsterstore\store.db
+[2026-07-21 08:30:26] [INFO] [main] ========================================
+[2026-07-21 08:30:26] [INFO] [main]    HamsterStore Node.js 验证模式
+[2026-07-21 08:30:26] [INFO] [main]    （已跳过 perry/thread 爬虫/下载模块）
+[2026-07-21 08:30:26] [INFO] [main] ========================================
+[2026-07-21 08:30:26] [INFO] [proxy] 加载加速节点: hub.fastgit.xyz,ghproxy.com,mirror.ghproxy.com
+(node:6712) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[2026-07-21 08:30:26] [INFO] [proxy] 加速代理启动 端口 5679
+[2026-07-21 08:30:26] [ERROR] [main] 启动失败: (0 , import_thread.spawn) is not a function

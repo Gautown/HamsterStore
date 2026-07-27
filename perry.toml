@@ -1,0 +1,17 @@
+# Perry configuration
+# https://github.com/PerryTS/perry
+
+[project]
+name = "hamsterstore"
+entry = "src/main.ts"
+
+[build]
+out_dir = "dist"
+opt_level = 2
+
+# Windows GUI 入口：独立编译为原生桌面应用
+# CLI 入口（src/main.ts）作为后台服务编译
+# 跨平台编译：perry compile --target windows|linux|macos
+[target.gui]
+entry = "src/gui/main.ts"
+target = "windows"

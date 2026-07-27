@@ -1,0 +1,17 @@
+[Unit]
+Description=HamsterStore 仓鼠软库
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hamsterstore
+ExecStart=/opt/hamsterstore/hamsterstore
+Restart=always
+RestartSec=5
+Environment=API_PORT=5678
+Environment=GITHUB_TOKEN=your_github_token_here
+Environment=LOG_LEVEL=INFO
+
+[Install]
+WantedBy=multi-user.target

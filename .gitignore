@@ -1,0 +1,9 @@
+tmp_lib/perry_stdlib.lib
+node_modules/
+dist/
+run_logs/
+runtime_extract/
+*.log
+*.o
+*.obj
+.env
