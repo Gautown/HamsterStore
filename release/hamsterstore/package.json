@@ -1,0 +1,27 @@
+{
+  "name": "hamsterstore",
+  "version": "1.0.0",
+  "description": "GitHub 开源项目聚合、加速、下载工具",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "perry compile src/main.ts -o dist/hamsterstore.exe && ./dist/hamsterstore.exe",
+    "build": "perry compile src/main.ts -o dist/hamsterstore.exe",
+    "build:gui": "perry compile src/gui/main.ts -o dist/HamsterStore.exe",
+    "build:all": "npm run build && npm run build:gui",
+    "test": "echo 'Run tests manually: compile test/*.ts with perry'",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "github",
+    "proxy",
+    "download",
+    "trending",
+    "accelerate"
+  ],
+  "author": "HamsterStore Team",
+  "license": "MIT",
+  "dependencies": {
+    "@perryts/perry": "^0.5.1220",
+    "@perryts/perry-win32-x64": "^0.5.1220"
+  }
+}

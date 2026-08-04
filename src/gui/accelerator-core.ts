@@ -40,10 +40,10 @@ const HARDCODED_IPS: Record<string, string[]> = {
 const ACCEL_DOMAINS = Object.keys(HARDCODED_IPS);
 const PUBLIC_DNS_SERVERS = ["1.1.1.1", "8.8.8.8", "114.114.114.114", "223.5.5.5"];
 
-const TCP_PROBE_TIMEOUT_MS = 3000;
 const MAX_IP_COUNT = 3;
-const DNS_TIMEOUT_MS = 4000;
-const RECHECK_INTERVAL_MS = 10 * 60 * 1000;
+const TCP_PROBE_TIMEOUT_MS = 1500;  // 在perry编译版中net.createConnection可能阻塞，调短
+const DNS_TIMEOUT_MS = 2000;
+const RECHECK_INTERVAL_MS = 30 * 60 * 1000;  // 30分钟（降低频次）
 
 // ============================================================
 // 类型与状态

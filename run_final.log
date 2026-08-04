@@ -1,6 +1,0 @@
-
-[gui] HamsterStore GUI 启动中...
-[perry] warning: trayCreate called before appCreate — no main HWND to receive tray callbacks. Returning 0.
-[tray] 系统托盘已启动
-[gui] GUI 启动完成
-[gui] 即将调用 App()...

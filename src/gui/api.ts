@@ -45,19 +45,14 @@ export async function fetchApi(path: string, options?: RequestInit): Promise<any
 // Windows CreateProcess → cmd.exe /C：& 被解析为命令分隔符，必须用 ^ 转义
 // 不能用引号——curl 在引号内把 "http://..." 当非法 URL
 function curlGetBody(url: string): string {
-  // cmd.exe 用 ^ 转义 &，避免命令分隔；* 也要转义避免 glob
   const safeUrl = url.replace(/&/g, "^&").replace(/\*/g, "^*");
-  const cmd = `curl -sS --max-time 15 ${safeUrl}`;
+  const cmd = `curl -sS --max-time 5 --retry 2 --retry-delay 1 ${safeUrl}`;
   const stdout = execSync(cmd, {
     maxBuffer: 10 * 1024 * 1024,
-    timeout: 18000,
+    timeout: 12000,
     stdio: ["pipe", "pipe", "pipe"],
   }) as unknown as Buffer;
-  const body = stdout.toString("utf8").trim();
-  if (body.length > 0) {
-    // console.log(`[api] ${url.slice(0, 55)}... (${body.length} bytes)`);
-  }
-  return body;
+  return stdout.toString("utf8").trim();
 }
 
 // 直接通过加速器 fetch GitHub URL（用于爬虫/获取 release 信息）

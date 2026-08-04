@@ -8,11 +8,9 @@ import { createProxyPanel } from "./ProxyPanel";
 import { createSettingsPanel } from "./SettingsPanel";
 import { initTray } from "./tray";
 import { bindShortcuts } from "./shortcuts";
-import { getApiPort } from "./api";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { startCliService, waitForApiReady, stopCliService } from "./cli-launcher";
-import { startAccelerator } from "./accelerator";
+import { startCliService, stopCliService } from "./cli-launcher";
 
 // HamsterStore GUI 主入口
 // 注意: 不使用 utils/logger — Perry 编译后 logger 模块顶层代码可能失败
@@ -58,19 +56,13 @@ async function startGUI() {
   try {
     console.log("[gui] HamsterStore GUI 启动中...");
 
-    // 1. 启动加速器（IP 测速，不依赖 fetch）
-    console.log("[gui] 启动 GitHub 加速器...");
-    startAccelerator();
-
-    // 2. 启动 CLI 服务（spawn Node.js 子进程）
+    //   1. 加速器在 CLI 端运行，不在 GUI 启动 node:dns/node:net blocking probes
+    //   2. 启动 CLI 服务（spawn Node.js 子进程——不等待它就绪）
     console.log("[gui] 启动 CLI 后端服务...");
     startCliService();
 
-    // 3. 等待 API 端口就绪（用 curl 检测，不用 fetch）
-    console.log("[gui] 等待 API 端口就绪...");
-    const apiPort = await waitForApiReady(45000);
-    console.log(`[gui] API 端口: ${apiPort}`);
-    // 加速器状态留空，perry 版 TCP probe 被防火墙阻止不影响功能
+    // 不阻塞等 API —— 分类加载用 fetchApi 的重试机制
+    // 窗口直接出现，分类数据异步加载（curl 失败时会重试）
 
     // 用 Button 行替代 TabBar
     const tabButtons = HStack(2, [
@@ -80,8 +72,8 @@ async function startGUI() {
       Button("系统设置", () => { switchToTab(3); }),
     ]);
 
-    // 面板容器 — 初始显示第一个标签
-    panelContainer = VStack(0, [createProjectBrowser()]);
+    // 面板容器 — 间距 8px，初始显示第一个标签
+    panelContainer = VStack(8, [createProjectBrowser()]);
     currentTab = 0;
 
     const body = VStack(4, [tabButtons, panelContainer]);

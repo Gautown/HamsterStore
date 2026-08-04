@@ -23,5 +23,8 @@
   "dependencies": {
     "@perryts/perry": "^0.5.1220",
     "@perryts/perry-win32-x64": "^0.5.1220"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.1"
   }
 }
