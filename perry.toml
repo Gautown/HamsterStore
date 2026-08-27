@@ -1,17 +1,22 @@
-# Perry configuration
-# https://github.com/PerryTS/perry
+# Perry configuration — HamsterStore 仓鼠软库 v1.0
+# LLVM + Clang + LLD，不依赖 MSVC
 
 [project]
 name = "hamsterstore"
+version = "1.0.0"
+description = "跨平台开源软件仓库管理工具 — 仓鼠软库"
 entry = "src/main.ts"
 
 [build]
 out_dir = "dist"
 opt_level = 2
 
-# Windows GUI 入口：独立编译为原生桌面应用
-# CLI 入口（src/main.ts）作为后台服务编译
-# 跨平台编译：perry compile --target windows|linux|macos
+# CLI 入口
+[target.cli]
+entry = "src/main.ts"
+target = "console"
+
+# Windows GUI 入口 — Bento UI 原生桌面应用
 [target.gui]
 entry = "src/gui/main.ts"
 target = "windows"
