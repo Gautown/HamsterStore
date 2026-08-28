@@ -10,5 +10,12 @@ config/
 /tmp/
 /assets/fonts/
 /bin/
+# *.pdb / *.ilk are build debug symbols — ignored by default so releases stay
+# small, BUT a matching .pdb is REQUIRED to debug any GUI crash dump
+# (08-10 crash was unreproducible because no PDB was ever emitted).
+# To ship a debuggable release, force-add the pair from a build dir:
+#   git add -f dist/HamsterStore-GUI.pdb dist/HamsterStore-GUI.exe.attest.json
+# The negation below keeps `git add dist/...` from silently sweeping the .exe in.
 *.pdb
 *.ilk
+!HamsterStore-GUI.pdb

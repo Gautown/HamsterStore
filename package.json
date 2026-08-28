@@ -6,8 +6,8 @@
   "scripts": {
     "check": "perry check",
     "types": "perry types",
-    "build:cli": "perry compile src/main.ts -o dist/HamsterStore.exe",
-    "build:gui": "perry compile src/gui/main.ts -o dist/HamsterStore-GUI.exe --target windows --min-windows-version 10",
+    "build:cli": "perry compile src/main.ts -o dist/HamsterStore.exe --emit-attest",
+    "build:gui": "perry compile src/gui/main.ts -o dist/HamsterStore-GUI.exe --target windows --min-windows-version 10 --debug-symbols --emit-attest",
     "build:all": "npm run build:cli && npm run build:gui",
     "dev:windows": "perry dev --target windows",
     "test": "echo 'Run tests manually: compile test/*.ts with perry'",
