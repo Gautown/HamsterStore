@@ -17,7 +17,6 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { UpdateCenter } from "./components/UpdateCenter";
 import { DownloadsPage } from "./components/DownloadManager";
 import { CategoryBrowser } from "./components/CategoryBrowser";
-import { SearchBar } from "./components/SearchBar";
 import { BentoGrid } from "./components/BentoGrid";
 import { PackageDetail } from "./components/PackageDetail";
 import { PackageRepository, InstallationRepository, DownloadRepository, SourceRepository } from "../data";
@@ -30,6 +29,7 @@ let currentPage: string = "home";
 let selectedCategory: string | null = null;
 let selectedPackageId: number = 0;
 let selectedSourceId: number = 0;
+let searchQuery: string = "";
 
 // === §6.2 构建主窗口主体 ===
 export function buildMainBody(): Widget {
@@ -117,7 +117,7 @@ function rebuildBody(): void {
 // === §6.4 页面路由 ===
 function buildPageContent(page: string): Widget {
     switch (page) {
-        case "packages": return PackageList({ category: selectedCategory, sourceId: selectedSourceId });
+        case "packages": return PackageList({ category: selectedCategory, sourceId: selectedSourceId, query: searchQuery });
         case "featured": return buildFeaturedPage();
         case "categories": return CategoryBrowser((catId) => {
             selectedCategory = catId || null;
@@ -138,6 +138,15 @@ function buildPageContent(page: string): Widget {
 export function navigateToDetail(packageId: number): void {
     selectedPackageId = packageId;
     currentPage = "detail";
+    rebuildBody();
+}
+
+// 导出给标题栏搜索用：本地搜索并跳转到软件库（按关键词过滤）
+export function runSearch(query: string): void {
+    searchQuery = (query || "").trim().toLowerCase();
+    selectedCategory = null;
+    selectedSourceId = 0;
+    currentPage = "packages";
     rebuildBody();
 }
 
@@ -196,7 +205,9 @@ function buildHomePage(): Widget {
     const midRow = BentoGrid([featuredCard, catCard], { columns: 2, spacing: SPACING.md });
 
     // 第三行：搜索栏
-    const searchBar = SearchBar();
+    const searchBar = Text("提示: 使用顶部搜索框检索 " + pkgs.length + " 个软件");
+    textSetFontSize(searchBar, FONT.xs);
+    textSetColor(searchBar, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
 
     // 第四行：软件卡片预览（前4个）
     const pkgPreview: Widget[] = [];

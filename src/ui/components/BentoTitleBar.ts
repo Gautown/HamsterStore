@@ -6,11 +6,12 @@ import {
     HStack, Text, Button, TextField, type Widget,
     widgetSetBackgroundColor, widgetMatchParentWidth,
     setCornerRadius, setPadding,
-    textSetFontSize, textSetColor,
+    textSetFontSize, textSetColor, textfieldGetString,
 } from "perry/ui";
 import { COLORS, RADIUS, SPACING, FONT } from "../styles/theme";
 import { closeWindow, minimizeWindow, maximizeWindow } from "../utils/window";
 import { PackageRepository } from "../../data";
+import { runSearch } from "../app";
 
 export function BentoTitleBar(): Widget {
     // 左：Logo 文字 + 标题
@@ -22,11 +23,15 @@ export function BentoTitleBar(): Widget {
     textSetFontSize(titleText, FONT.md);
     textSetColor(titleText, COLORS.text.r, COLORS.text.g, COLORS.text.b, 1.0);
 
-    // 中：搜索框
-    const searchInput = TextField("搜索软件...", () => {});
+    // 中：搜索框 — 唯一搜索入口（首页不再重复放置搜索框）
+    const searchInput = TextField("搜索软件...", () => {
+        // onChange: 输入即检索（轻量）
+        const q = textfieldGetString(searchInput).trim();
+        if (q.length >= 2) runSearch(q);
+    });
     const searchBtn = Button("搜索", () => {
-        // 搜索本地数据库
-        // 实际跳转逻辑由 app.ts 处理
+        const q = textfieldGetString(searchInput).trim();
+        if (q) runSearch(q);
     });
 
     // 右：窗口控制

@@ -15,13 +15,22 @@ import { navigateToDetail } from "../app";
 export interface PackageListFilter {
     category?: string | null;
     sourceId?: number;
+    query?: string;
 }
 
 export function PackageList(filter: PackageListFilter = {}): Widget {
     const all = PackageRepository.getAll();
     let pkgs = all;
+    if (filter.query) {
+        const q = filter.query.toLowerCase();
+        pkgs = pkgs.filter(p => {
+            const name = (p.name || "").toLowerCase();
+            const desc = (p.description || "").toLowerCase();
+            return name.includes(q) || desc.includes(q);
+        });
+    }
     if (filter.category) {
-        pkgs = all.filter(p => {
+        pkgs = pkgs.filter(p => {
             try {
                 const cats = JSON.parse(p.categories || "[]");
                 return Array.isArray(cats) && cats.includes(filter.category);
@@ -32,7 +41,12 @@ export function PackageList(filter: PackageListFilter = {}): Widget {
         pkgs = pkgs.filter(p => String(p.source_id) === String(filter.sourceId));
     }
 
-    const header = Text("软件列表 (" + pkgs.length + ")");
+    const headerText = filter.query
+        ? "搜索 \"" + filter.query + "\" (" + pkgs.length + ")"
+        : filter.category
+            ? "分类: " + filter.category + " (" + pkgs.length + ")"
+            : "软件列表 (" + pkgs.length + ")";
+    const header = Text(headerText);
     textSetFontSize(header, FONT.lg);
     textSetColor(header, COLORS.text.r, COLORS.text.g, COLORS.text.b, 1.0);
 

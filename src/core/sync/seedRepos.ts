@@ -4,7 +4,9 @@
 import type { Source } from "../../types";
 import { RepoSyncEngine } from "./RepoSyncEngine";
 import { initDatabase } from "../../data/Database";
-import { SourceRepository } from "../../data";
+import { SourceRepository, PackageRepository } from "../../data";
+import { GitHubAPIClient } from "./GitHubAPIClient";
+import { BUILT_IN_PACKAGES } from "./BuiltInData";
 
 // 种子仓库列表（按优先级排序）
 export const SEED_REPOS: Array<{
@@ -82,6 +84,34 @@ export function initSeedSources(): number {
             });
             created++;
         }
+    }
+    return created;
+}
+
+// 首次启动注入真实种子软件库（BUILT_IN_PACKAGES）— 保证离线/未 sync 也能展示真实数据。
+// 仅当本地软件包极少时注入，避免覆盖用户已 sync 的数据。
+export function seedBuiltInPackages(): number {
+    const source = SourceRepository.getAll().find(s => s.owner === "sindresorhus" && s.repo === "awesome");
+    const sourceId = source ? source.id : 0;
+    let created = 0;
+    for (let i = 0; i < BUILT_IN_PACKAGES.length; i++) {
+        const p = BUILT_IN_PACKAGES[i];
+        const name = p.owner + "/" + p.repo;
+        const hash = GitHubAPIClient.urlHash(p.url);
+        if (PackageRepository.getByUrlHash(hash)) continue; // 已存在则跳过
+        PackageRepository.create({
+            source_id: sourceId,
+            name,
+            version: "",
+            description: p.description,
+            categories: JSON.stringify([p.category]),
+            platform_assets: "[]",
+            project_url: p.url,
+            url_hash: hash,
+            download_url: p.url,
+            data_source: "builtin-awesome",
+        });
+        created++;
     }
     return created;
 }
