@@ -5,7 +5,7 @@ import {
     VStack, HStack, Text, Button, Divider, type Widget,
     widgetAddChild, widgetClearChildren, widgetMatchParentWidth,
     widgetSetBackgroundColor, setPadding, setCornerRadius,
-    textSetFontSize, textSetColor,
+    textSetFontSize, textSetColor, onFrame,
 } from "perry/ui";
 import { COLORS, SPACING, FONT, RADIUS } from "./styles/theme";
 import { BentoTitleBar } from "./components/BentoTitleBar";
