@@ -98,13 +98,8 @@ export function DedupReportPage(): Widget {
         Button("执行清理", () => {
             try {
                 const result = dedupCleaner.runCleanup();
-                // 显示结果
-                const info = Text("✓ 已清理 " + result.cleaned + " 条重复记录");
-                textSetFontSize(info, FONT.sm);
-                textSetColor(info, COLORS.success.r, COLORS.success.g, COLORS.success.b, 1.0);
-                children.push(info);
-                // 刷新页面
-                setTimeout(() => { _rebuildBody && _rebuildBody(); }, 300);
+                // 清理完成后直接 rebuild，不依赖临时追加的 widget
+                setTimeout(() => { _rebuildBody && _rebuildBody(); }, 500);
             } catch (e) {
                 const err = Text("清理失败: " + (e instanceof Error ? e.message : String(e)));
                 textSetFontSize(err, FONT.sm);
@@ -117,6 +112,19 @@ export function DedupReportPage(): Widget {
         }),
     ]);
     children.push(btnRow);
+
+    // 显示清理统计（来自 report，持久化在 widget 树中）
+    if (report.duplicateGroups > 0 || report.fuzzyCandidates.length > 0) {
+        const warnText = Text("提示: 发现 " + report.duplicateGroups + " 组精确重复 | " + report.fuzzyCandidates.length + " 对模糊候选，点击'执行清理'处理");
+        textSetFontSize(warnText, FONT.xs);
+        textSetColor(warnText, COLORS.warning.r, COLORS.warning.g, COLORS.warning.b, 1.0);
+        children.push(warnText);
+    } else {
+        const okText = Text("✓ 当前无重复项需要清理");
+        textSetFontSize(okText, FONT.xs);
+        textSetColor(okText, COLORS.success.r, COLORS.success.g, COLORS.success.b, 1.0);
+        children.push(okText);
+    }
 
     const container = VStack(SPACING.sm, children);
     widgetMatchParentWidth(container);

@@ -22,48 +22,54 @@ export function DownloadsPage(): Widget {
     textSetFontSize(title, FONT.xl);
     textSetColor(title, COLORS.text.r, COLORS.text.g, COLORS.text.b, 1.0);
 
-    // 从 DB 获取所有任务
+    // 从 DB 获取所有历史记录
     const all = DownloadRepository.getAll();
-    const activeTasks = all.filter((t: any) => t.status === "waiting" || t.status === "downloading");
     const doneTasks = all.filter((t: any) => t.status === "done").slice(0, 10);
     const failedTasks = all.filter((t: any) => t.status === "failed").slice(0, 5);
 
-    // 合并内存中的实时状态
+    // 内存中的实时状态
     const activeStates = DownloadManager.getActive();
     const queuedStates = DownloadManager.getQueued();
+
+    // 合并：DB 中状态为 waiting/downloading 的与内存合并（内存优先）
+    const dbActive = all.filter((t: any) => t.status === "waiting" || t.status === "downloading");
+    const mergedActive = activeStates.length > 0 ? activeStates : dbActive;
+    // 队列：内存中有则显示内存，否则显示 DB 中 waiting 的
+    const displayQueue = queuedStates.length > 0 ? queuedStates :
+        dbActive.map((t: any) => ({ packageId: t.package_id, url: t.url, name: t.url.split("/").pop() || "下载" }));
 
     const children: Widget[] = [title, Divider()];
 
     // --- 状态栏 ---
-    const runningCount = activeStates.length;
-    const queueCount = queuedStates.length;
-    const statusText = Text("运行中: " + runningCount + " | 队列: " + queueCount + " | 总计: " + all.length);
+    const runningCount = mergedActive.length;
+    const queueCount = displayQueue.length;
+    const statusText = Text("运行中: " + runningCount + " | 队列: " + queueCount + " | 历史: " + (doneTasks.length + failedTasks.length));
     textSetFontSize(statusText, FONT.xs);
     textSetColor(statusText, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
     children.push(statusText);
     children.push(Divider());
 
     // --- 进行中 ---
-    const activeHeader = Text("进行中 (" + activeStates.length + ")");
+    const activeHeader = Text("进行中 (" + mergedActive.length + ")");
     textSetFontSize(activeHeader, FONT.md);
     textSetColor(activeHeader, COLORS.text.r, COLORS.text.g, COLORS.text.b, 1.0);
     children.push(activeHeader);
 
-    if (activeStates.length === 0 && queueCount === 0) {
+    if (mergedActive.length === 0 && queueCount === 0) {
         const empty = Text("  暂无下载任务");
         textSetFontSize(empty, FONT.sm);
         textSetColor(empty, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
         children.push(empty);
     }
 
-    for (let i = 0; i < activeStates.length; i++) {
-        children.push(buildProgressCard(activeStates[i]));
+    for (let i = 0; i < mergedActive.length; i++) {
+        children.push(buildProgressCard(mergedActive[i]));
     }
 
     // 队列中的任务
-    for (let i = 0; i < queuedStates.length; i++) {
-        const q = queuedStates[i];
-        const nameW = Text("○ 排队: " + q.name);
+    for (let i = 0; i < displayQueue.length; i++) {
+        const q = displayQueue[i];
+        const nameW = Text("○ 排队: " + (q.name || "下载任务"));
         textSetFontSize(nameW, FONT.sm);
         textSetColor(nameW, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
         children.push(nameW);
@@ -105,8 +111,9 @@ export function DownloadsPage(): Widget {
     children.push(Divider());
     const btnRow = HStack(SPACING.sm, [
         Button("清空历史", () => {
+            // 先清理内存中的已完成/失败任务，再清空 DB
+            DownloadManager.clearCompleted();
             DownloadRepository.clearAll();
-            DownloadManager.clearAll();
             _rebuildBody && _rebuildBody();
         }),
         Button("刷新", () => {
