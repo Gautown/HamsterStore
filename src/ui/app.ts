@@ -1,16 +1,14 @@
-// HamsterStoreApp — Bento UI 主应用窗口
-// 开发文档 §6.2 Bento Grid + §6.4 七大核心页面
+// HamsterStoreApp — Microsoft Store 风格全屏布局
+// 顶部标题栏 + 左侧导航 + 右侧内容区
 
 import {
-    VStack, HStack, Text, Button, Divider, type Widget,
+    HStack, VStack, Text, Button, Divider, type Widget,
     widgetAddChild, widgetClearChildren, widgetMatchParentWidth,
     widgetSetBackgroundColor, setPadding, setCornerRadius,
     textSetFontSize, textSetColor, onFrame,
 } from "perry/ui";
 import { COLORS, SPACING, FONT, RADIUS } from "./styles/theme";
-import { BentoTitleBar } from "./components/BentoTitleBar";
-import { StatusBar } from "./components/StatusBar";
-import { BentoCard } from "./components/BentoCard";
+import { AppLayout } from "./AppLayout";
 import { PackageList } from "./components/PackageList";
 import { InstalledList } from "./components/InstalledList";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -18,152 +16,75 @@ import { UpdateCenter } from "./components/UpdateCenter";
 import { DownloadsPage, setRebuildBody as setDownloadRebuild } from "./components/DownloadManager";
 import { DedupReportPage, setRebuildBody as setDedupRebuild } from "./components/DedupReport";
 import { CategoryBrowser } from "./components/CategoryBrowser";
-import { BentoGrid } from "./components/BentoGrid";
 import { PackageDetail } from "./components/PackageDetail";
-import { PackageRepository, InstallationRepository, DownloadRepository, SourceRepository } from "../data";
-import { CATEGORY_TREE } from "../core/categorization/CategoryEngine";
-import { DownloadManager } from "../core/download/DownloadManager";
-import { dedupCleaner } from "../core/dedup/DedupCleaner";
+import { PackageRepository, InstallationRepository, DownloadRepository, SourceRepository } from "./data";
+import { CATEGORY_TREE } from "./core/categorization/CategoryEngine";
+import { DownloadManager } from "./core/download/DownloadManager";
+import { dedupCleaner } from "./core/dedup/DedupCleaner";
 
-// 全局窗口引用 + 当前页面状态
-let windowRef: Widget | null = null;
-let contentRef: Widget | null = null;
+// === 全局状态 ===
 let currentPage: string = "home";
 let selectedCategory: string | null = null;
-let selectedPackageId: number = 0;
 let selectedSourceId: number = 0;
+let selectedPackageId: number = 0;
 let searchQuery: string = "";
+
+// 暴露给 SideNav 和 ContentArea 的导航函数
+(globalThis as any).__hamsterStoreNavigate = function(pageId: string): void {
+    currentPage = pageId;
+    if (pageId === "home" || pageId === "packages") {
+        selectedCategory = null;
+        selectedSourceId = 0;
+    }
+    rebuildContent();
+};
+
+(globalThis as any).__hamsterStoreCategory = null;
+(globalThis as any).__hamsterStoreSourceId = 0;
+(globalThis as any).__hamsterStoreQuery = "";
 
 // === §6.2 构建主窗口主体 ===
 export function buildMainBody(): Widget {
-    const titleBar = BentoTitleBar();
-    const navPlaceholder = VStack(0, []);
-    navRef = navPlaceholder;
-    const nav = buildNav();
-    widgetAddChild(navPlaceholder, nav);
-    // contentRef 是空容器，rebuildBody 会 clear+add 切换页面内容
-    const contentPlaceholder = VStack(0, []);
-    contentRef = contentPlaceholder;
-    const initialContent = buildPageContent(currentPage);
-    widgetAddChild(contentPlaceholder, initialContent);
-    const status = StatusBar();
-
-    const body = VStack(SPACING.md, [
-        titleBar,
-        HStack(SPACING.md, [navPlaceholder, contentPlaceholder]),
-        status,
-    ]);
-
-    widgetMatchParentWidth(body);
-    widgetSetBackgroundColor(body, COLORS.bg.r, COLORS.bg.g, COLORS.bg.b, 1.0);
-    setPadding(body, SPACING.sm, SPACING.md, SPACING.sm, SPACING.md);
-
-    windowRef = body;
-    return body;
+    return AppLayout();
 }
 
-// === §6.4 导航栏 — 八大页面入口（Bento 风格竖向按钮） ===
-function buildNav(): Widget {
-    const navItems = [
-        { id: "home", label: "首页", icon: "[H]" },
-        { id: "packages", label: "软件库", icon: "[P]" },
-        { id: "featured", label: "精选推荐", icon: "[F]" },
-        { id: "categories", label: "分类浏览", icon: "[C]" },
-        { id: "downloads", label: "下载管理", icon: "[D]" },
-        { id: "dedup", label: "去重报告", icon: "[R]" },
-        { id: "installed", label: "已安装", icon: "[I]" },
-        { id: "updates", label: "更新中心", icon: "[U]" },
-        { id: "settings", label: "设置", icon: "[S]" },
-    ];
-
-    const btns: Widget[] = [];
-    for (let i = 0; i < navItems.length; i++) {
-        const itemId = navItems[i].id;
-        const icon = navItems[i].icon;
-        const label = navItems[i].label;
-        // 高亮当前选中
-        const isActive = currentPage === itemId;
-        const displayLabel = (isActive ? "> " : "  ") + icon + " " + label;
-        const btn = Button(displayLabel, () => {
-            currentPage = itemId;
-            // 选中分类/来源时重置
-            if (itemId === "home" || itemId === "packages") {
-                selectedCategory = null;
-                selectedSourceId = 0;
-            }
-            rebuildBody();
-        });
-        btns.push(btn);
-    }
-
-    const nav = VStack(SPACING.xs, btns);
-    widgetMatchParentWidth(nav);
-    widgetSetBackgroundColor(nav, COLORS.white.r, COLORS.white.g, COLORS.white.b, 1.0);
-    setCornerRadius(nav, RADIUS.card);
-    setPadding(nav, SPACING.sm, SPACING.xs, SPACING.sm, SPACING.xs);
-    return nav;
-}
-
-let navRef: Widget | null = null;
-
-function rebuildBody(): void {
-    if (!contentRef || !navRef) return;
-    // 重建内容区
-    widgetClearChildren(contentRef);
-    const newContent = buildPageContent(currentPage);
-    widgetAddChild(contentRef, newContent);
-    // 重建导航栏（更新选中高亮）
-    widgetClearChildren(navRef);
-    const newNav = buildNav();
-    widgetAddChild(navRef, newNav);
-}
-
-// === §6.4 页面路由 ===
-function buildPageContent(page: string): Widget {
-    switch (page) {
-        case "packages": return PackageList({ category: selectedCategory, sourceId: selectedSourceId, query: searchQuery });
-        case "featured": return buildFeaturedPage();
-        case "categories": return CategoryBrowser((catId) => {
-            selectedCategory = catId || null;
-            selectedSourceId = 0;
-            currentPage = "packages";
-            rebuildBody();
-        });
-        case "downloads": setDownloadRebuild(rebuildBody); return DownloadsPage();
-        case "dedup": setDedupRebuild(rebuildBody); return DedupReportPage();
-        case "installed": return InstalledList();
-        case "updates": return UpdateCenter();
-        case "settings": return SettingsPanel();
-        case "detail": return PackageDetail(selectedPackageId);
-        default: return buildHomePage();
-    }
+// 重建内容区（由 SideNav 点击导航项触发）
+function rebuildContent(): void {
+    // ContentArea 自己管理状态，这里只做全局状态同步
+    (globalThis as any).__hamsterStoreCurrentPage = currentPage;
 }
 
 // 导出给 PackageList 用：点击卡片跳转详情
 export function navigateToDetail(packageId: number): void {
     selectedPackageId = packageId;
     currentPage = "detail";
-    rebuildBody();
+    rebuildContent();
+    // 设置详情页面
+    (globalThis as any).__hamsterStoreDetailPage = PackageDetail(packageId);
 }
 
-// 导出给标题栏搜索用：本地搜索并跳转到软件库（按关键词过滤）
-export function runSearch(query: string): void {
+// 暴露给 TitleBar 使用
+(globalThis as any).__hamsterRunSearch = runSearch;
+(globalThis as any).__hamsterCloseWindow = () => { try { process.exit(0); } catch {} };
+
+function runSearch(query: string): void {
     searchQuery = (query || "").trim().toLowerCase();
     selectedCategory = null;
     selectedSourceId = 0;
     currentPage = "packages";
-    rebuildBody();
+    (globalThis as any).__hamsterStoreQuery = searchQuery;
+    rebuildContent();
 }
 
 // === §6.2 首页 Bento Grid 布局 ===
-function buildHomePage(): Widget {
+export function buildHomePage(): Widget {
     const pkgs = PackageRepository.getAll();
     const installed = safeCount(() => InstallationRepository.getAll());
     const sources = SourceRepository.getAll().length;
     const updatable = 0;
     const downloads = safeCount(() => DownloadRepository.getAll());
 
-    // 第一行：统计 + 热门推荐 + 更新提醒
+    // 第一行：统计卡片
     const statCard = BentoCard({
         title: "软件统计",
         subtitle: "已安装: " + installed + " | 可更新: " + updatable + " | 软件源: " + sources + " 个",
@@ -182,13 +103,13 @@ function buildHomePage(): Widget {
         size: "small",
     });
 
-    // 下载管理快捷入口卡片
+    // 下载管理快捷入口
     const dlCard = BentoCard({
         title: "下载管理",
         subtitle: "运行中: " + DownloadManager.getActive().length + " | 队列: " + DownloadManager.getQueued().length,
         size: "small",
         bgColor: { r: COLORS.primary.r, g: COLORS.primary.g, b: COLORS.primary.b },
-        onPress: () => { currentPage = "downloads"; rebuildBody(); },
+        onPress: () => { (globalThis as any).__hamsterStoreNavigate("downloads"); },
     });
 
     const dedupReport = (() => {
@@ -202,16 +123,16 @@ function buildHomePage(): Widget {
         subtitle: dedupReport,
         size: "small",
         bgColor: { r: COLORS.warning.r, g: COLORS.warning.g, b: COLORS.warning.b },
-        onPress: () => { currentPage = "dedup"; rebuildBody(); },
+        onPress: () => { (globalThis as any).__hamsterStoreNavigate("dedup"); },
     });
 
     const topRow = BentoGrid([statCard, hotCard, updateCard, dlCard, dedupCard], { columns: 5, spacing: SPACING.md });
 
     // 第二行：精选推荐 + 分类浏览
-    const sources = SourceRepository.getAll();
+    const sourcesList = SourceRepository.getAll();
     const seedLines: Widget[] = [];
-    for (let i = 0; i < Math.min(sources.length, 6); i++) {
-        seedLines.push(buildSeedLine(sources[i].owner + "/" + sources[i].repo));
+    for (let i = 0; i < Math.min(sourcesList.length, 6); i++) {
+        seedLines.push(buildSeedLine(sourcesList[i].owner + "/" + sourcesList[i].repo));
     }
 
     const featuredCard = BentoCard({
@@ -232,7 +153,7 @@ function buildHomePage(): Widget {
 
     const midRow = BentoGrid([featuredCard, catCard], { columns: 2, spacing: SPACING.md });
 
-    // 第三行：搜索栏
+    // 第三行：搜索提示
     const searchBar = Text("提示: 使用顶部搜索框检索 " + pkgs.length + " 个软件");
     textSetFontSize(searchBar, FONT.xs);
     textSetColor(searchBar, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
@@ -262,7 +183,6 @@ function buildHomePage(): Widget {
 // === §6.4 精选推荐页面 ===
 function buildFeaturedPage(): Widget {
     const sources = SourceRepository.getAll();
-
     const btns: Widget[] = [];
     for (let i = 0; i < sources.length; i++) {
         const s = sources[i];
@@ -271,7 +191,8 @@ function buildFeaturedPage(): Widget {
         const btn = Button(label, () => {
             selectedSourceId = sourceId;
             currentPage = "packages";
-            rebuildBody();
+            (globalThis as any).__hamsterStoreSourceId = sourceId;
+            rebuildContent();
         });
         btns.push(btn);
     }
@@ -296,7 +217,6 @@ function buildSeedLine(text: string): Widget {
 }
 
 function emojiForCat(catId: string): string {
-    // perry parser 不支持 Record<string,string> + emoji → 用 if-else 链
     if (catId === "dev-tools") return "[dev]";
     if (catId === "dev-ops") return "[ops]";
     if (catId === "system") return "[sys]";
@@ -318,4 +238,64 @@ function emojiForCat(catId: string): string {
 
 function safeCount(fn: () => any[]): number {
     try { return fn().length; } catch { return 0; }
+}
+
+// === BentoCard 和 BentoGrid 内联（避免循环依赖）===
+export function BentoCard(options: { title?: string; subtitle?: string; badge?: string; icon?: string; size?: "large" | "medium" | "small"; bgColor?: { r: number; g: number; b: number }; onPress?: () => void }, children: Widget[] = []): Widget {
+    const title = options.title;
+    const subtitle = options.subtitle;
+    const size = options.size || "medium";
+    const bgColor = options.bgColor;
+
+    const contentWidgets: Widget[] = [];
+    if (title) {
+        const titleW = Text(title);
+        textSetFontSize(titleW, size === "large" ? FONT.lg : FONT.md);
+        textSetColor(titleW, COLORS.text.r, COLORS.text.g, COLORS.text.b, 1.0);
+        contentWidgets.push(titleW);
+    }
+    if (subtitle) {
+        const subW = Text(subtitle);
+        textSetFontSize(subW, FONT.sm);
+        textSetColor(subW, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
+        contentWidgets.push(subW);
+    }
+    for (let i = 0; i < children.length; i++) {
+        contentWidgets.push(children[i]);
+    }
+
+    const padding = size === "small" ? SPACING.sm : SPACING.md;
+    const rd = size === "large" ? RADIUS.card : RADIUS.smallCard;
+    const bg = bgColor || COLORS.bgCard;
+
+    const card = VStack(SPACING.sm, contentWidgets);
+    widgetSetBackgroundColor(card, bg.r, bg.g, bg.b, 1.0);
+    widgetMatchParentWidth(card);
+    setCornerRadius(card, rd);
+    setPadding(card, padding, padding, padding, padding);
+
+    if (options.onPress) {
+        // 注意：perry 中 Button.onPress 不可靠，用 widgetSetOnMouseDown
+        // 但 BentoCard 是 VStack，无法直接绑定鼠标事件
+        // 这里暂时不做点击处理，由调用方自己处理
+    }
+
+    return card;
+}
+
+export function BentoGrid(items: Widget[], options: { columns?: number; spacing?: number } = {}): Widget {
+    const cols = options.columns || 3;
+    const gap = options.spacing || SPACING.md;
+    const rows: Widget[] = [];
+
+    for (let i = 0; i < items.length; i += cols) {
+        const slice = items.slice(i, i + cols);
+        const row = HStack(gap, slice);
+        widgetMatchParentWidth(row);
+        rows.push(row);
+    }
+
+    const grid = VStack(gap, rows);
+    widgetMatchParentWidth(grid);
+    return grid;
 }
