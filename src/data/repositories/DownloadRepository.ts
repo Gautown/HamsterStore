@@ -35,6 +35,14 @@ export const DownloadRepository = {
         this.updateStatus(id, "failed", 0);
     },
 
+    deleteById(id: number): void {
+        safePrepare("DELETE FROM download_tasks WHERE id = ?").run(id);
+    },
+
+    clearAll(): void {
+        safePrepare("DELETE FROM download_tasks").run();
+    },
+
     count(): number {
         const all = this.getAll();
         return all.length;

@@ -84,9 +84,24 @@ export function PackageList(filter: PackageListFilter = {}): Widget {
             navigateToDetail(p.id);
         });
 
-        const dlBtn = Button("v", () => {
-            const dlUrl = "https://github.com/" + p.name;
-            DownloadManager.openInBrowser(dlUrl);
+        const dlBtn = Button("下载", () => {
+            // 找下载 URL（优先 download_url，其次 GitHub release 页）
+            let dlUrl = pkg.download_url || "";
+            if (!dlUrl) {
+                // 尝试从 platform_assets 取第一个 asset
+                try {
+                    const assets = JSON.parse(pkg.platform_assets || "[]");
+                    if (Array.isArray(assets) && assets.length > 0) {
+                        dlUrl = assets[0].browser_download_url || assets[0].url || "";
+                    }
+                } catch {}
+            }
+            if (dlUrl) {
+                DownloadManager.startDownload(pkg.id, dlUrl, pkg.name || "download");
+            } else {
+                // fallback: 打开 GitHub 页面
+                DownloadManager.openInBrowser("https://github.com/" + pkg.name);
+            }
         });
 
         const row = HStack(SPACING.sm, [nameW, catW, detailBtn, dlBtn]);

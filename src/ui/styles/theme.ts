@@ -13,6 +13,9 @@ export const COLORS = {
     textSecondary: { r: 0.392, g: 0.451, b: 0.510 },  // #647387
     divider: { r: 0.878, g: 0.886, b: 0.902 },        // #E0E2E6
     error: { r: 0.937, g: 0.267, b: 0.267 },          // #EF4444
+    success: { r: 0.22, g: 0.72, b: 0.40 },           // #38B666
+    warning: { r: 0.96, g: 0.68, b: 0.16 },           // #F5AD29
+    danger: { r: 0.94, g: 0.24, b: 0.24 },            // #EF3D3D
     star: { r: 0.961, g: 0.725, b: 0.141 },           // #F5B924
 };
 

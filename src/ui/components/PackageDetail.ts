@@ -50,9 +50,9 @@ export function PackageDetail(packageId: number): Widget {
     textSetColor(versionW, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
 
     // 按钮
-    const dlUrl = "https://github.com/" + (pkg.name || "");
+    const dlUrl = pkg.download_url || ("https://github.com/" + (pkg.name || ""));
     const downloadBtn = Button("下载", () => {
-        DownloadManager.openInBrowser(dlUrl);
+        DownloadManager.startDownload(pkg.id, dlUrl, pkg.name || "download");
     });
 
     const installBtn = Button("安装", () => {

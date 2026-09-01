@@ -15,12 +15,15 @@ import { PackageList } from "./components/PackageList";
 import { InstalledList } from "./components/InstalledList";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { UpdateCenter } from "./components/UpdateCenter";
-import { DownloadsPage } from "./components/DownloadManager";
+import { DownloadsPage, setRebuildBody as setDownloadRebuild } from "./components/DownloadManager";
+import { DedupReportPage, setRebuildBody as setDedupRebuild } from "./components/DedupReport";
 import { CategoryBrowser } from "./components/CategoryBrowser";
 import { BentoGrid } from "./components/BentoGrid";
 import { PackageDetail } from "./components/PackageDetail";
 import { PackageRepository, InstallationRepository, DownloadRepository, SourceRepository } from "../data";
 import { CATEGORY_TREE } from "../core/categorization/CategoryEngine";
+import { DownloadManager } from "../core/download/DownloadManager";
+import { dedupCleaner } from "../core/dedup/DedupCleaner";
 
 // 全局窗口引用 + 当前页面状态
 let windowRef: Widget | null = null;
@@ -67,6 +70,7 @@ function buildNav(): Widget {
         { id: "featured", label: "精选推荐", icon: "[F]" },
         { id: "categories", label: "分类浏览", icon: "[C]" },
         { id: "downloads", label: "下载管理", icon: "[D]" },
+        { id: "dedup", label: "去重报告", icon: "[R]" },
         { id: "installed", label: "已安装", icon: "[I]" },
         { id: "updates", label: "更新中心", icon: "[U]" },
         { id: "settings", label: "设置", icon: "[S]" },
@@ -125,7 +129,8 @@ function buildPageContent(page: string): Widget {
             currentPage = "packages";
             rebuildBody();
         });
-        case "downloads": return DownloadsPage();
+        case "downloads": setDownloadRebuild(rebuildBody); return DownloadsPage();
+        case "dedup": setDedupRebuild(rebuildBody); return DedupReportPage();
         case "installed": return InstalledList();
         case "updates": return UpdateCenter();
         case "settings": return SettingsPanel();
@@ -177,7 +182,30 @@ function buildHomePage(): Widget {
         size: "small",
     });
 
-    const topRow = BentoGrid([statCard, hotCard, updateCard], { columns: 3, spacing: SPACING.md });
+    // 下载管理快捷入口卡片
+    const dlCard = BentoCard({
+        title: "下载管理",
+        subtitle: "运行中: " + DownloadManager.getActive().length + " | 队列: " + DownloadManager.getQueued().length,
+        size: "small",
+        bgColor: { r: COLORS.primary.r, g: COLORS.primary.g, b: COLORS.primary.b },
+        onPress: () => { currentPage = "downloads"; rebuildBody(); },
+    });
+
+    const dedupReport = (() => {
+        try {
+            const r = dedupCleaner.generateReport();
+            return "重复: " + r.duplicateGroups + " 组 | 模糊: " + r.fuzzyCandidates.length + " 对";
+        } catch { return "去重: 检查中"; }
+    })();
+    const dedupCard = BentoCard({
+        title: "去重报告",
+        subtitle: dedupReport,
+        size: "small",
+        bgColor: { r: COLORS.warning.r, g: COLORS.warning.g, b: COLORS.warning.b },
+        onPress: () => { currentPage = "dedup"; rebuildBody(); },
+    });
+
+    const topRow = BentoGrid([statCard, hotCard, updateCard, dlCard, dedupCard], { columns: 5, spacing: SPACING.md });
 
     // 第二行：精选推荐 + 分类浏览
     const sources = SourceRepository.getAll();
