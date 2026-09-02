@@ -64,6 +64,9 @@ export function PackageDetail(packageId: number): Widget {
     if (projectUrl) {
         infoRows.push(createInfoRow("项目地址", projectUrl));
     }
+    if (downloadUrl) {
+        infoRows.push(createInfoRow("下载地址", downloadUrl));
+    }
     if (dataSource) {
         infoRows.push(createInfoRow("数据来源", dataSource));
     }
@@ -107,7 +110,7 @@ function createCatBadge(catStr: string): Widget {
     textSetFontSize(badge, FONT.xs);
     textSetColor(badge, COLORS.secondary.r, COLORS.secondary.g, COLORS.secondary.b, 1.0);
     widgetSetBackgroundColor(badge, 0.9, 0.95, 1.0, 1.0);
-    setCornerRadius(badge, RADIUS.tag);
+    setCornerRadius(badge, 8);
     setPadding(badge, SPACING.xs, SPACING.sm, SPACING.xs, SPACING.sm);
     return badge;
 }

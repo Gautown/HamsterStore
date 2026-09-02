@@ -5,15 +5,14 @@ import {
     textSetFontSize, textSetColor,
     widgetMatchParentWidth, setCornerRadius, setPadding,
     widgetSetBackgroundColor,
-    widgetSetOnChange,
 } from "perry/ui";
 import { COLORS, RADIUS, SPACING, FONT } from "../styles/theme";
-import { PackageRepository } from "../../data";
 
 export interface SearchResult {
     id: number;
     name: string;
     description: string;
+    categories: string;
     html_url: string;
 }
 
@@ -33,24 +32,26 @@ export function SearchBar(onSearch?: (results: SearchResult[]) => void): Widget 
     });
     
     const searchBtn = Button("搜索", () => {
-        const query = textfieldGetString(input).toLowerCase();
+        const query = textfieldGetString(input).trim();
         if (!query) return;
         
         (globalThis as any).__hamsterStoreQuery = query;
         (globalThis as any).__hamsterStoreNavigate && (globalThis as any).__hamsterStoreNavigate("packages");
         
         // 立即过滤显示
-        const pkgs = PackageRepository.getAll();
+        const pkgs = (globalThis as any).__hamsterStoreGetPackages ? 
+            (globalThis as any).__hamsterStoreGetPackages() : [];
         const results: SearchResult[] = [];
         for (let i = 0; i < pkgs.length; i++) {
             const p = pkgs[i];
             const name = (p.name || "").toLowerCase();
             const desc = (p.description || "").toLowerCase();
-            if (name.includes(query) || desc.includes(query)) {
+            if (name.includes(query.toLowerCase()) || desc.includes(query.toLowerCase())) {
                 results.push({
                     id: p.id,
                     name: p.name,
                     description: p.description || "",
+                    categories: p.categories || "",
                     html_url: "https://github.com/" + p.name,
                 });
             }
@@ -72,6 +73,5 @@ export function SearchBar(onSearch?: (results: SearchResult[]) => void): Widget 
 
 // 重建列表（由外部调用）
 function rebuildList(): void {
-    // 通过全局状态触发重渲染
     (globalThis as any).__hamsterStoreRebuild && (globalThis as any).__hamsterStoreRebuild();
 }

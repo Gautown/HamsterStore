@@ -4,7 +4,6 @@ import {
     widgetMatchParentWidth, widgetSetBackgroundColor,
     setPadding, setCornerRadius,
     textSetFontSize, textSetColor,
-    widgetSetBackgroundColorOnHover,
 } from "perry/ui";
 import { COLORS, SPACING, FONT, RADIUS } from "../styles/theme";
 import { PackageRepository } from "../../data";
@@ -13,7 +12,7 @@ interface CategoryNode {
     id: string;
     name: string;
     count: number;
-    children?: CategoryNode[];
+    emoji: string;
 }
 
 export function CategoryBrowser(onSelect: (catId: string) => void): Widget {
@@ -34,20 +33,20 @@ export function CategoryBrowser(onSelect: (catId: string) => void): Widget {
     
     // 构建树形结构
     const ROOT_CATS: CategoryNode[] = [
-        { id: "all", name: "全部", count: pkgs.length },
-        { id: "dev-tools", name: "开发工具", count: catCounts["dev-tools"] || 0 },
-        { id: "education", name: "学习教育", count: catCounts["education"] || 0 },
-        { id: "utility", name: "实用工具", count: catCounts["utility"] || 0 },
-        { id: "web", name: "Web开发", count: catCounts["web"] || 0 },
-        { id: "database", name: "数据库", count: catCounts["database"] || 0 },
-        { id: "office", name: "办公效率", count: catCounts["office"] || 0 },
-        { id: "game", name: "游戏娱乐", count: catCounts["game"] || 0 },
-        { id: "media", name: "多媒体", count: catCounts["media"] || 0 },
-        { id: "security", name: "安全相关", count: catCounts["security"] || 0 },
-        { id: "system-tools", name: "系统工具", count: catCounts["system-tools"] || 0 },
-        { id: "network", name: "网络工具", count: catCounts["network"] || 0 },
-        { id: "communication", name: "通讯社交", count: catCounts["communication"] || 0 },
-        { id: "dev-ops", name: "运维部署", count: catCounts["dev-ops"] || 0 },
+        { id: "all", name: "全部", count: pkgs.length, emoji: "📦" },
+        { id: "dev-tools", name: "开发工具", count: catCounts["dev-tools"] || 0, emoji: "🛠️" },
+        { id: "education", name: "学习教育", count: catCounts["education"] || 0, emoji: "📚" },
+        { id: "utility", name: "实用工具", count: catCounts["utility"] || 0, emoji: "🔧" },
+        { id: "web", name: "Web开发", count: catCounts["web"] || 0, emoji: "🌐" },
+        { id: "database", name: "数据库", count: catCounts["database"] || 0, emoji: "💾" },
+        { id: "office", name: "办公效率", count: catCounts["office"] || 0, emoji: "💼" },
+        { id: "game", name: "游戏娱乐", count: catCounts["game"] || 0, emoji: "🎮" },
+        { id: "media", name: "多媒体", count: catCounts["media"] || 0, emoji: "🎬" },
+        { id: "security", name: "安全相关", count: catCounts["security"] || 0, emoji: "🔒" },
+        { id: "system-tools", name: "系统工具", count: catCounts["system-tools"] || 0, emoji: "⚙️" },
+        { id: "network", name: "网络工具", count: catCounts["network"] || 0, emoji: "🌐" },
+        { id: "communication", name: "通讯社交", count: catCounts["communication"] || 0, emoji: "💬" },
+        { id: "dev-ops", name: "运维部署", count: catCounts["dev-ops"] || 0, emoji: "🚀" },
     ];
     
     const header = Text("分类浏览");
@@ -72,7 +71,7 @@ export function CategoryBrowser(onSelect: (catId: string) => void): Widget {
 
 function createCatButton(cat: CategoryNode, onSelect: (catId: string) => void): Widget {
     const countText = cat.count > 0 ? ` (${cat.count})` : "";
-    const label = Text(cat.name + countText);
+    const label = Text(cat.emoji + " " + cat.name + countText);
     textSetFontSize(label, FONT.base);
     textSetColor(label, cat.id === "all" ? COLORS.primary.r : COLORS.text.r,
                   cat.id === "all" ? COLORS.primary.g : COLORS.text.g,
