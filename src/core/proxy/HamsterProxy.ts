@@ -1,17 +1,13 @@
-// HamsterProxy — 本地 HTTP/HTTPS 代理服务器（简单版）
-// 实现 FastGithub 类似的功能：拦截 GitHub 请求，路由到最优代理节点
-// 使用 spawn curl 方式，避免 Perry execSync 问题
+// HamsterProxy — 网络加速器封装
+// 借鉴 FastGithub 思路：通过 ProxyManager 的镜像/代理节点加速 GitHub 搜索和 downloads
+// 底层复用 ProxyManager v2（非阻塞测速 + 节点缓存 + 故障转移）
+// 纯封装层，不做本地代理服务器（Perry 单线程事件循环 + spawn 回调不可靠，
+// 本地 HTTP 代理监听在 v0.5.1220 下无法实现，URL 级加速是当前稳定路径）
 
-import { spawn } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
 import { ProxyManager } from "./ProxyManager";
 import type { ProxyNode } from "./proxies";
 
-// 代理端口
-const PROXY_PORT = 38457;
-
-// GitHub 相关域名
+// GitHub 相关域名（加速目标）
 const GITHUB_DOMAINS = [
     "github.com",
     "api.github.com",
@@ -27,103 +23,14 @@ const GITHUB_DOMAINS = [
 export interface ProxyServerStatus {
     running: boolean;
     port: number;
-    mode: "mirror" | "proxy" | "mixed";
+    mode: "mirror" | "proxy" | "mixed" | "direct";
     latency: number;
     currentNode: string;
 }
 
-/**
- * 通过 spawn curl 获取远程内容（绕过 Perry execSync 限制）
- */
-function fetchViaCurl(url: string, options: {
-    headers?: Record<string, string>;
-    maxTime?: number;
-    timeoutMs?: number;
-} = {}): Promise<{ success: boolean; body?: string; statusCode?: number; error?: string }> {
-    return new Promise((resolve) => {
-        const timeoutMs = options.timeoutMs || 15000;
-        const maxTime = options.maxTime || 10000;
-        const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
-        const outputFile = join(process.env.TEMP || "/tmp", `proxy_${requestId}.json`);
-
-        const args: string[] = [
-            "-sS", "-L", "--ssl-no-revoke",
-            "--connect-timeout", String(Math.ceil(maxTime / 1000)),
-            "--max-time", String(Math.ceil(maxTime / 1000)),
-            "-w", "\n%{http_code}",
-        ];
-
-        if (options.headers) {
-            for (const [k, v] of Object.entries(options.headers)) {
-                args.push("-H", `${k}: ${v}`);
-            }
-        }
-
-        // cmd.exe 转义
-        const safeUrl = url.replace(/&/g, "^&").replace(/\*/g, "^*");
-        args.push(safeUrl);
-
-        const proc = spawn("curl", args, {
-            stdio: ["ignore", "pipe", "pipe"],
-            timeout: timeoutMs,
-        });
-
-        let stdout = "";
-        let stderr = "";
-
-        proc.stdout.on("data", (chunk: Buffer) => {
-            stdout += chunk.toString("utf8");
-        });
-
-        proc.stderr.on("data", (chunk: Buffer) => {
-            stderr += chunk.toString("utf8");
-        });
-
-        proc.on("close", (code: number | null) => {
-            // 分离状态码和正文
-            const lines = stdout.split("\n");
-            const lastLine = lines[lines.length - 1] || "0";
-            const statusCode = parseInt(lastLine, 10) || 0;
-            const body = lines.slice(0, -1).join("\n");
-
-            resolve({
-                success: code === 0 && statusCode >= 200 && statusCode < 300,
-                body: body.trim(),
-                statusCode,
-                error: code !== 0 ? `exit ${code}` : (stderr.trim() || undefined),
-            });
-
-            // 清理
-            try { unlinkSync(outputFile); } catch {}
-        });
-
-        // 超时处理
-        setTimeout(() => {
-            if (!proc.killed) {
-                proc.kill();
-                resolve({ success: false, error: "timeout" });
-            }
-        }, timeoutMs);
-    });
-}
-
 export class HamsterProxy {
     private static instance: HamsterProxy;
-    private running = false;
-    private status: ProxyServerStatus = {
-        running: false,
-        port: PROXY_PORT,
-        mode: "mixed",
-        latency: 0,
-        currentNode: "direct",
-    };
-    // 请求队列
-    private requestQueue: Array<{
-        url: string;
-        method: string;
-        headers: Record<string, string>;
-        resolve: (result: any) => void;
-    }> = [];
+    private started = false;
 
     private constructor() {}
 
@@ -135,23 +42,14 @@ export class HamsterProxy {
     }
 
     /**
-     * 启动代理（实际是初始化代理管理器）
+     * 启动加速器（非阻塞：初始化测速在后台进行）
      */
     start(): boolean {
-        if (this.running) {
-            return true;
-        }
-
+        if (this.started) return true;
         try {
-            const pm = ProxyManager.getInstance();
-            pm.init().then(() => {
-                this.running = true;
-                this.updateStatus();
-                console.log(`[HamsterProxy] Started (mode: ${this.status.mode})`);
-            }).catch(err => {
-                console.error("[HamsterProxy] Init failed:", err.message);
-                this.running = false;
-            });
+            ProxyManager.getInstance().init();
+            this.started = true;
+            console.log("[HamsterProxy] Started (accelerator active, speed test in background)");
             return true;
         } catch (e: any) {
             console.error("[HamsterProxy] Failed to start:", e.message);
@@ -159,82 +57,62 @@ export class HamsterProxy {
         }
     }
 
-    /**
-     * 停止代理
-     */
     stop(): void {
-        this.running = false;
-        this.status.running = false;
+        this.started = false;
         console.log("[HamsterProxy] Stopped");
     }
 
     /**
-     * 获取状态
+     * 获取状态（状态栏显示用）
      */
     getStatus(): ProxyServerStatus {
-        return { ...this.status };
+        const pm = ProxyManager.getInstance();
+        const st = pm.getStatus();
+        const node: ProxyNode | null = pm.getBestNode();
+        return {
+            running: this.started && pm.isProxyEnabled(),
+            port: 0,
+            mode: node ? (node.mode === "prefix" ? "proxy" : "mirror") : "direct",
+            latency: st.latency,
+            currentNode: st.nodeName,
+        };
     }
 
     /**
-     * 加速 URL
+     * 加速 URL（搜索/API 调用用）
      */
     accelerateUrl(url: string): string {
-        const pm = ProxyManager.getInstance();
-        return pm.accelerateUrl(url);
+        return ProxyManager.getInstance().accelerateUrl(url);
     }
 
     /**
-     * 判断是否是 GitHub 域名
+     * 加速下载链接（releases 下载用，优先 prefix 节点）
+     */
+    accelerateDownload(url: string): string {
+        return ProxyManager.getInstance().accelerateDownload(url);
+    }
+
+    /**
+     * 判断是否 GitHub 域名
      */
     isGitHubDomain(url: string): boolean {
         if (!url) return false;
         let hostname = url;
         if (url.includes("://")) {
-            try {
-                hostname = new URL(url).hostname;
-            } catch {
-                return false;
-            }
+            const m = url.match(/^https?:\/\/([^\/]+)/);
+            if (m) hostname = m[1];
         }
-        return GITHUB_DOMAINS.some(domain => hostname.endsWith(domain));
+        const host = hostname.split(":")[0].toLowerCase();
+        return GITHUB_DOMAINS.some(domain => host === domain || host.endsWith("." + domain));
     }
 
     /**
-     * 执行代理请求
+     * 重新测速
      */
-    async fetch(url: string, options: {
-        method?: string;
-        headers?: Record<string, string>;
-    } = {}): Promise<{ success: boolean; body?: string; statusCode?: number; error?: string }> {
-        const pm = ProxyManager.getInstance();
-        const acceleratedUrl = this.accelerateUrl(url);
-        const node = pm.getBestNode();
-
-        console.log(`[HamsterProxy] ${options.method || "GET"} ${url} -> ${acceleratedUrl}`);
-
-        // 使用 spawn curl 获取
-        return fetchViaCurl(acceleratedUrl, {
-            headers: options.headers,
-            maxTime: 15000,
-            timeoutMs: 20000,
-        });
-    }
-
-    /**
-     * 更新状态
-     */
-    private updateStatus(): void {
-        const pm = ProxyManager.getInstance();
-        const node = pm.getBestNode();
-        this.status = {
-            running: this.running,
-            port: PROXY_PORT,
-            mode: node?.type || "mixed",
-            latency: node?.latency || 0,
-            currentNode: node?.name || "direct",
-        };
+    retest(): void {
+        ProxyManager.getInstance().retest();
     }
 }
 
-// 导出便捷函数
+// 便捷单例
 export const hamsterProxy = HamsterProxy.getInstance();

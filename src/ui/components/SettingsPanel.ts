@@ -1,5 +1,6 @@
 // SettingsPanel — 设置面板（Bento 风格）
-// Token 管理 + 加速器开关 + 版本信息
+// Token 管理 + 加速器开关/重新测速 + 版本信息
+// Perry v0.5.1220: 内联颜色常量，避免 theme.ts 导入链问题
 
 import {
     VStack, HStack, Text, Button, TextField, Divider, type Widget,
@@ -9,7 +10,18 @@ import {
     textSetFontSize, textSetColor,
 } from "perry/ui";
 import { SettingRepository } from "../../data";
-import { COLORS, SPACING, FONT } from "../styles/theme";
+import { ProxyManager } from "../../core/proxy/ProxyManager";
+
+const COLORS = {
+    primary: { r: 0.145, g: 0.388, b: 0.922 },
+    bg: { r: 0.945, g: 0.953, b: 0.965 },
+    text: { r: 0.118, g: 0.161, b: 0.231 },
+    textSecondary: { r: 0.392, g: 0.451, b: 0.510 },
+    success: { r: 0.22, g: 0.72, b: 0.40 },
+    warning: { r: 0.96, g: 0.68, b: 0.16 },
+};
+const SPACING = { sm: 8, md: 16, lg: 24 };
+const FONT = { xs: 10, sm: 12, base: 14, md: 16, xl: 22 };
 
 export function SettingsPanel(): Widget {
     const token = SettingRepository.getValue("github_token") || "";
@@ -23,7 +35,7 @@ export function SettingsPanel(): Widget {
     textSetFontSize(tokenLabel, FONT.md);
     textSetColor(tokenLabel, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
 
-    const tokenPlaceholder = token ? "已配置 (输入新值覆盖)" : "ghp_xxxxxxxxxxxx";
+    const tokenPlaceholder = token ? "已配置 (输入新值覆盖)" : "粘贴 Token...";
     const tokenInput = TextField(tokenPlaceholder, () => { /* onChange */ });
     textfieldSetString(tokenInput, token);
     const tokenStatus = Text(token ? "已配置 [OK]" : "未配置 [!]");
@@ -35,6 +47,9 @@ export function SettingsPanel(): Widget {
         SettingRepository.setValue("github_token", val);
     });
 
+    // 当前加速状态（实时读取 ProxyManager）
+    const pm = ProxyManager.getInstance();
+    const pmStatus = pm.getStatus();
     const proxyLabel = Text("加速器");
     textSetFontSize(proxyLabel, FONT.md);
     textSetColor(proxyLabel, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
@@ -42,7 +57,19 @@ export function SettingsPanel(): Widget {
     const proxyToggle = Button(proxyEnabled === "true" ? "关闭加速器" : "开启加速器", () => {
         const nxt = proxyEnabled === "true" ? "false" : "true";
         SettingRepository.setValue("proxy_enabled", nxt);
+        ProxyManager.getInstance().setProxyEnabled(nxt === "true");
     });
+
+    const retestBtn = Button("重新测速", () => {
+        ProxyManager.getInstance().retest();
+    });
+
+    const statusLabel = pmStatus.measuring ? "测速中..." :
+        (pmStatus.connected ? "已连接 " + pmStatus.nodeName + " (" + pmStatus.latency + "ms)" : "未连接（直连模式）");
+    const statusText = Text(statusLabel);
+    textSetFontSize(statusText, FONT.sm);
+    const statusColor = pmStatus.connected ? COLORS.success : COLORS.warning;
+    textSetColor(statusText, statusColor.r, statusColor.g, statusColor.b, 1.0);
 
     const versionText = Text("HamsterStore v1.0.0 - Perry v0.5.1220");
     textSetFontSize(versionText, FONT.xs);
@@ -52,7 +79,7 @@ export function SettingsPanel(): Widget {
         title, Divider(),
         tokenLabel, tokenInput, tokenStatus, saveBtn,
         Divider(),
-        proxyLabel, proxyToggle,
+        proxyLabel, HStack(SPACING.sm, [proxyToggle, retestBtn]), statusText,
         Divider(),
         versionText,
     ]);

@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { createWriteStream, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { DownloadRepository } from "../../data";
+import { ProxyManager } from "../proxy/ProxyManager";
 
 export interface DownloadTaskState {
     id: number;
@@ -48,10 +49,16 @@ function processQueue(): void {
     }
 }
 
-function startDownloadInternal(packageId: number, url: string, name: string): void {
+function startDownloadInternal(packageId: number, url: string, name: string, attemptViaProxy: boolean = true): void {
     const task = DownloadRepository.getById(packageId) as any;
     const taskId = task ? task.id : packageId;
     const destFile = join(downloadDir(), makeFilename(name, url));
+
+    // 需求核心：downloads 走代理加速；失败时标记节点并直连重试一次
+    let effectiveUrl = url;
+    if (attemptViaProxy) {
+        effectiveUrl = ProxyManager.getInstance().accelerateDownload(url);
+    }
 
     const st: DownloadTaskState = {
         id: taskId,
@@ -62,7 +69,7 @@ function startDownloadInternal(packageId: number, url: string, name: string): vo
         progress: 0,
         totalBytes: -1,
         downloadedBytes: 0,
-        detail: "准备中...",
+        detail: attemptViaProxy && effectiveUrl !== url ? "加速下载中..." : "准备中...",
     };
     activeDownloads.set(taskId, st);
     DownloadRepository.updateStatus(taskId, "downloading", 0);
@@ -74,7 +81,7 @@ function startDownloadInternal(packageId: number, url: string, name: string): vo
         "--max-time", "300",
         "-o", destFile,
         "--progress-bar",
-        url,
+        effectiveUrl,
     ], { stdio: ["ignore", "pipe", "pipe"] });
 
     let totalBytes = 0;
@@ -113,16 +120,30 @@ function startDownloadInternal(packageId: number, url: string, name: string): vo
     });
 
     child.on("close", (code: number | null) => {
-        if (code === 0 || existsSync(destFile)) {
+        const ok = code === 0 && existsSync(destFile);
+        if (ok) {
             st.progress = 100;
             st.status = "done";
             st.detail = destFile;
             DownloadRepository.markDone(taskId);
-        } else {
-            st.status = "failed";
-            st.detail = "Download failed (exit=" + code + ")";
-            DownloadRepository.markFailed(taskId);
+            activeDownloads.delete(taskId);
+            processQueue();
+            return;
         }
+        // 故障转移：代理 URL 下载失败 → 标记节点失败，直连重试一次
+        if (attemptViaProxy && effectiveUrl !== url) {
+            console.log(`[Download] Proxy URL failed (exit=${code}), falling back to direct connection`);
+            const pm = ProxyManager.getInstance();
+            const best = pm.getBestNode();
+            if (best) pm.markFailed(best.name);
+            activeDownloads.delete(taskId);
+            // 同一槽位直接直连重试（attemptViaProxy=false）
+            startDownloadInternal(packageId, url, name, false);
+            return;
+        }
+        st.status = "failed";
+        st.detail = "Download failed (exit=" + code + ")";
+        DownloadRepository.markFailed(taskId);
         activeDownloads.delete(taskId);
         processQueue();
     });
