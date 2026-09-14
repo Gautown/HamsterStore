@@ -50,8 +50,14 @@ export const PackageRepository = {
         const db = getDatabase();
         const table = (db as any).tables?.packages;
         if (!table) throw new Error("packages table not found");
-        
-        const nextId = table.nextId++;
+
+        // nextId 对齐既有数据：取 max(id)+1（防止历史数据导致的 ID 冲突）
+        let nextId = Number(table.nextId) || 0;
+        for (const r of (table.rows || [])) {
+            const rid = Number(r.id) || 0;
+            if (rid >= nextId) nextId = rid + 1;
+        }
+        table.nextId = nextId + 1;
         const ext = {
             platform_assets: input.platform_assets || "[]",
             project_url: input.project_url,

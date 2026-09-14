@@ -1,15 +1,15 @@
-// GitHubAPIClient — GitHub REST API v3 客户端
-// API 优先策略：带 Token 的 API 调用，限流时由同步引擎降级到爬虫
-// 注意：perry fetch 是 stub，必须用 execSync("curl") 实现 HTTP 客户端
+// GitHubAPIClient v2 — GitHub REST API v3 客户端（netFetch 回调式）
+// v2 变更：execSync 全部弃用（真实二进制实测：引号/& 参数必挂），
+// 统一走 netFetch.netGetJson（spawn 数组 + 文件轮询），加速经 ProxyManager。
 
-import { execSync } from "node:child_process";
 import type { Asset, Release } from "../../types";
 import { ProxyManager } from "../proxy/ProxyManager";
+import { netGetJson, netGetText } from "../net/netFetch";
+import type { NetOptions } from "../net/netFetch";
 
-// GitHub API 仓库信息
 export interface RepoInfo {
     name: string;
-    full_name: string;       // owner/repo
+    full_name: string;
     owner: string;
     description: string;
     stargazers_count: number;
@@ -23,130 +23,107 @@ export interface RepoInfo {
     latest_release: Release | null;
 }
 
+const UA = "HamsterStore/1.0.0";
+
 export class GitHubAPIClient {
     private token: string;
     private readonly apiBase = "https://api.github.com";
-    private readonly userAgent = "HamsterStore/1.0.0";
 
     constructor(token?: string) {
         this.token = token || process.env.GITHUB_TOKEN || "";
     }
 
-    setToken(token: string): void {
-        this.token = token;
+    setToken(token: string): void { this.token = token; }
+    hasToken(): boolean { return this.token.length > 0; }
+
+    private headers(): Record<string, string> {
+        const h: Record<string, string> = {
+            "User-Agent": UA,
+            "Accept": "application/vnd.github+json",
+        };
+        if (this.token) h["Authorization"] = "Bearer " + this.token;
+        return h;
     }
 
-    hasToken(): boolean {
-        return this.token.length > 0;
+    private opts(timeoutMs?: number): NetOptions {
+        return { headers: this.headers(), timeoutMs };
     }
 
-    // curl 获取 JSON（处理 cmd.exe 转义陷阱）
-    private curlJson(url: string): { ok: boolean; data: any; status: number; bytes: number } {
-        // 加速：有代理配置时走加速
-        const proxy = ProxyManager.getInstance();
-        const accelUrl = proxy.accelerateUrl(url);
-        // cmd.exe 转义：& → ^&
-        const safeUrl = accelUrl.replace(/&/g, "^&").replace(/\*/g, "^*");
-        const headerArgs: string[] = [
-            "-H", `"User-Agent: ${this.userAgent}"`,
-            "-H", '"Accept: application/vnd.github+json"',
-        ];
-        if (this.token) {
-            headerArgs.push("-H", `"Authorization: Bearer ${this.token}"`);
-        }
-        const cmd = `curl -sS -w "\\n%{http_code}" --max-time 15 ${headerArgs.join(" ")} ${safeUrl}`;
-        try {
-            const stdout = execSync(cmd, {
-                maxBuffer: 10 * 1024 * 1024,
-                timeout: 20000,
-                stdio: ["pipe", "pipe", "pipe"],
-            }) as unknown as Buffer;
-            const text = stdout.toString("utf8").trim();
-            // 分离 JSON body 和 status code（最后一个换行后是状态码）
-            const lastNl = text.lastIndexOf("\n");
-            if (lastNl < 0) {
-                return { ok: false, data: null, status: 0, bytes: text.length };
-            }
-            const statusStr = text.substring(lastNl + 1).trim();
-            const body = text.substring(0, lastNl);
-            const status = parseInt(statusStr, 10) || 0;
-            const bytes = body.length;
-            if (status >= 200 && status < 300) {
-                try {
-                    return { ok: true, data: JSON.parse(body), status, bytes };
-                } catch {
-                    return { ok: false, data: null, status, bytes };
+    // 仓库信息
+    getRepoInfo(owner: string, repo: string, onDone: (info: RepoInfo | null) => void): void {
+        const url = this.accelerated(`${this.apiBase}/repos/${owner}/${repo}`);
+        netGetJson(url, this.opts(), (data) => {
+            if (!data || !data.full_name) { onDone(null); return; }
+            onDone(this.normalizeRepoInfo(data));
+        });
+    }
+
+    // 最新 Release
+    getLatestRelease(owner: string, repo: string, onDone: (rel: Release | null) => void): void {
+        const url = this.accelerated(`${this.apiBase}/repos/${owner}/${repo}/releases/latest`);
+        netGetJson(url, this.opts(), (data) => {
+            if (!data || data.message) { onDone(null); return; }
+            onDone(this.normalizeRelease(data));
+        });
+    }
+
+    // 所有 Releases
+    getReleases(owner: string, repo: string, perPage: number, onDone: (rels: Release[]) => void): void {
+        const url = this.accelerated(`${this.apiBase}/repos/${owner}/${repo}/releases?per_page=${perPage}`);
+        netGetJson(url, this.opts(), (data) => {
+            if (!Array.isArray(data)) { onDone([]); return; }
+            onDone(data.map((rel: any) => this.normalizeRelease(rel)).filter(Boolean));
+        });
+    }
+
+    // README（raw 文本）
+    getReadme(owner: string, repo: string, onDone: (text: string) => void): void {
+        // raw 直取（fast 秒级）
+        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/README.md`;
+        const accel = ProxyManager.getInstance().accelerateUrl(rawUrl);
+        netGetText(accel, this.opts(20000), (ok, body) => {
+            if (ok && body) { onDone(body); return; }
+            // 回退：API readme 接口（base64）
+            const apiUrl = this.accelerated(`${this.apiBase}/repos/${owner}/${repo}/readme`);
+            netGetJson(apiUrl, this.opts(20000), (data) => {
+                if (data && data.content) {
+                    try {
+                        onDone(Buffer.from(data.content, "base64").toString("utf8"));
+                        return;
+                    } catch {}
                 }
-            }
-            return { ok: false, data: null, status, bytes };
-        } catch {
-            return { ok: false, data: null, status: 0, bytes: 0 };
-        }
+                onDone("");
+            });
+        });
     }
 
-    // 获取仓库信息
-    getRepoInfo(owner: string, repo: string): RepoInfo | null {
-        const url = `${this.apiBase}/repos/${owner}/${repo}`;
-        const r = this.curlJson(url);
-        if (!r.ok || !r.data) return null;
-        // rate limit 检查（响应 < 300 bytes 且无 full_name = rate limit JSON）
-        if (r.bytes < 300 && !r.data.full_name) {
-            console.log(`[GitHubAPI] Rate limit response (${r.bytes} bytes) for ${owner}/${repo}`);
-            return null;
-        }
-        return this.normalizeRepoInfo(r.data);
+    // 搜索仓库
+    searchRepositories(query: string, perPage: number, onDone: (items: any[]) => void): void {
+        const url = this.accelerated(`${this.apiBase}/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=${perPage}`);
+        netGetJson(url, this.opts(20000), (data) => {
+            onDone(data && Array.isArray(data.items) ? data.items : []);
+        });
     }
 
-    // 获取最新 Release
-    getLatestRelease(owner: string, repo: string): Release | null {
-        const url = `${this.apiBase}/repos/${owner}/${repo}/releases/latest`;
-        const r = this.curlJson(url);
-        if (!r.ok || !r.data) return null;
-        if (r.data.message && r.data.message.includes("Not Found")) return null;
-        return this.normalizeRelease(r.data);
+    // 速率限制
+    checkRateLimit(onDone: (r: { remaining: number; limit: number } | null) => void): void {
+        const url = this.accelerated(`${this.apiBase}/rate_limit`);
+        netGetJson(url, this.opts(), (data) => {
+            if (!data || !data.resources || !data.resources.core) { onDone(null); return; }
+            onDone({ remaining: data.resources.core.remaining, limit: data.resources.core.limit });
+        });
     }
 
-    // 获取所有 Releases（分页）
-    getReleases(owner: string, repo: string, perPage: number = 30): Release[] {
-        const url = `${this.apiBase}/repos/${owner}/${repo}/releases?per_page=${perPage}&sort=published_at`;
-        const r = this.curlJson(url);
-        if (!r.ok || !Array.isArray(r.data)) return [];
-        return r.data.map((rel: any) => this.normalizeRelease(rel)).filter(Boolean);
+    // 经 ProxyManager 加速
+    private accelerated(url: string): string {
+        return ProxyManager.getInstance().accelerateUrl(url);
     }
 
-    // 获取 README 内容（raw 文本）
-    getReadme(owner: string, repo: string, branch?: string): string {
-        const ref = branch || "main";
-        const url = `${this.apiBase}/repos/${owner}/${repo}/readme?ref=${ref}`;
-        const r = this.curlJson(url);
-        if (!r.ok || !r.data || !r.data.download_url) return "";
-        // download_url 指向 raw.githubusercontent.com
-        return this.curlRaw(r.data.download_url);
-    }
-
-    // 直接获取 raw 文本
-    private curlRaw(url: string): string {
-        // cmd.exe 转义
-        const safeUrl = url.replace(/&/g, "^&").replace(/\*/g, "^*");
-        const cmd = `curl -sS --max-time 15 -H "User-Agent: ${this.userAgent}" ${safeUrl}`;
-        try {
-            const stdout = execSync(cmd, {
-                maxBuffer: 10 * 1024 * 1024,
-                timeout: 20000,
-                stdio: ["pipe", "pipe", "pipe"],
-            }) as unknown as Buffer;
-            return stdout.toString("utf8");
-        } catch {
-            return "";
-        }
-    }
-
-    // 标准化 RepoInfo
     private normalizeRepoInfo(data: any): RepoInfo {
         return {
             name: data.name || "",
             full_name: data.full_name || "",
-            owner: data.owner?.login || (data.full_name || "").split("/")[0] || "",
+            owner: data.owner ? data.owner.login : (data.full_name || "").split("/")[0] || "",
             description: data.description || "",
             stargazers_count: data.stargazers_count || 0,
             forks_count: data.forks_count || 0,
@@ -156,11 +133,10 @@ export class GitHubAPIClient {
             homepage: data.homepage || "",
             license: data.license ? { name: data.license.name, spdx_id: data.license.spdx_id } : null,
             default_branch: data.default_branch || "main",
-            latest_release: null,  // 单独调用 getLatestRelease 获取
+            latest_release: null,
         };
     }
 
-    // 标准化 Release
     private normalizeRelease(data: any): Release {
         return {
             tag_name: data.tag_name || "",
@@ -176,33 +152,15 @@ export class GitHubAPIClient {
         };
     }
 
-    // 检查 API 速率限制（是否被限流）
-    checkRateLimit(): { remaining: number; reset_at: string; limit: number } | null {
-        const url = `${this.apiBase}/rate_limit`;
-        const r = this.curlJson(url);
-        if (!r.ok || !r.data?.resources?.core) return null;
-        return {
-            remaining: r.data.resources.core.remaining,
-            reset_at: r.data.resources.core.reset || "",
-            limit: r.data.resources.core.limit,
-        };
-    }
-
     // 规范化 GitHub URL 为去重键
-    // 输入 https://github.com/owner/repo 或 https://github.com/owner/repo/anything → github.com/owner/repo
     static normalizeUrl(url: string): string {
         let s = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-        // 提取 github.com/owner/repo
         const m = s.match(/github\.com\/([^\/]+)\/([^\/\)#?]+)/);
-        if (m) {
-            return `github.com/${m[1]}/${m[2]}`.toLowerCase();
-        }
+        if (m) return `github.com/${m[1]}/${m[2]}`.toLowerCase();
         return s.toLowerCase();
     }
 
-    // 计算 URL 哈希（用于精确去重）— node:crypto 在 perry 中是 stub
     static urlHash(url: string): string {
-        // Simple string hash fallback
         let hash = 0;
         const s = GitHubAPIClient.normalizeUrl(url);
         for (let i = 0; i < s.length; i++) {
@@ -213,7 +171,6 @@ export class GitHubAPIClient {
         return Math.abs(hash).toString(16);
     }
 
-    // 从 URL 提取 owner/repo
     static parseOwnerRepo(url: string): { owner: string; repo: string } | null {
         const m = url.match(/github\.com\/([^\/]+)\/([^\/\)#?]+)/);
         if (!m) return null;

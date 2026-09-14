@@ -6,6 +6,21 @@ import { SourceRepository, PackageRepository } from "../../data";
 import { GitHubAPIClient } from "./GitHubAPIClient";
 import { BUILT_IN_PACKAGES } from "./BuiltInData";
 
+// Perry v0.5.1220: 全局对象初始化时可能存在只读属性问题
+// 使用安全访问模式
+const safeGet = (obj: any, ...keys: string[]): any => {
+    try {
+        let cur = obj;
+        for (const k of keys) {
+            if (cur === null || cur === undefined) return undefined;
+            cur = cur[k];
+        }
+        return cur;
+    } catch {
+        return undefined;
+    }
+};
+
 // 高质量种子仓库列表
 // 优先级：Windows 专用源 > 通用 awesome 列表 > 分类精选
 export const SEED_REPOS: Array<{
@@ -18,6 +33,25 @@ export const SEED_REPOS: Array<{
     // 是否启用 GitHub Releases 直接抓取（需要 token）
     fetchReleases?: boolean;
 }> = [
+    // === 真实可下载工具（自带 Windows release 资产，验证下载链路）===
+    {
+        owner: "mifi",
+        repo: "lossless-cut",
+        source_type: "github_repo",
+        description: "LosslessCut — 无损视频/音频剪辑（swiss army knife）",
+        parserConfig: "github_repo",
+        branch: "master",
+        fetchReleases: true,
+    },
+    {
+        owner: "BurntSushi",
+        repo: "ripgrep",
+        source_type: "github_repo",
+        description: "ripgrep (rg) — 递归正则搜索工具",
+        parserConfig: "github_repo",
+        branch: "master",
+        fetchReleases: true,
+    },
     // === Windows 专用精选源（高优先级）===
     {
         owner: "Axorax",
@@ -156,8 +190,20 @@ export function initSeedSources(): number {
 }
 
 function findSource(owner: string, repo: string): any {
-    const all = SourceRepository.getAll();
-    return all.find((s: any) => s.owner === owner && s.repo === repo);
+    try {
+        const all = SourceRepository.getAll();
+        if (!all || !Array.isArray(all)) return undefined;
+        for (let i = 0; i < all.length; i++) {
+            const s = all[i];
+            if (!s) continue;
+            const sOwner = safeGet(s, 'owner');
+            const sRepo = safeGet(s, 'repo');
+            if (sOwner === owner && sRepo === repo) return s;
+        }
+        return undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 function createSource(seed: typeof SEED_REPOS[0], listRepo: string): void {

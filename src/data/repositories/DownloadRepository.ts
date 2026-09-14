@@ -16,11 +16,17 @@ export const DownloadRepository = {
     },
 
     create(data: { url: string; package_id: number; status?: string }): DownloadTask {
-        const nextId = this.count() + 1;
         safePrepare(
-            "INSERT INTO download_tasks (id, package_id, url, status, progress) VALUES (?, ?, ?, ?, 0.0)"
-        ).run(nextId, data.package_id, data.url, data.status || "waiting");
-        return this.getById(nextId)!;
+            "INSERT INTO download_tasks (package_id, url, status, progress) VALUES (?, ?, ?, 0.0)"
+        ).run(data.package_id, data.url, data.status || "waiting");
+        // FileDB 自增 id：取全表最大 id（create 后即新行）
+        const all = this.getAll();
+        let maxId = 0;
+        for (const t of all) {
+            const tid = Number(t.id) || 0;
+            if (tid > maxId) maxId = tid;
+        }
+        return this.getById(maxId)!;
     },
 
     updateStatus(id: number, status: string, progress: number = 0): void {

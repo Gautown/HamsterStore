@@ -1,15 +1,9 @@
 // GUI 数据适配层 — 仅保留入口初始化
 // 其他数据读取由 ui/components 直接调用 data/Repository
 
-import { initDatabase, PackageRepository } from "../data";
-import { initSeedSources, seedBuiltInPackages } from "../core/sync/seedRepos";
+// Perry v0.5.1220: GUI 不需要显式初始化数据库
+// 数据库由 FileDB 懒加载，Repository 方法会内部初始化
 
 export function initData(): void {
-    initDatabase();
-    initSeedSources();
-    // 首次启动/数据为空时注入真实种子软件库（离线可展示真实数据）
-    if (PackageRepository.getAll().length < 30) {
-        const n = seedBuiltInPackages();
-        if (n > 0) console.log("[init] seeded " + n + " built-in packages");
-    }
+    // 空函数，数据库会在首次访问时自动初始化
 }

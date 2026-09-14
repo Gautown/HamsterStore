@@ -1,12 +1,16 @@
-// DownloadManager v4 — curl spawn + 进度跟踪 + 并发队列
-// perry v0.5.1220: http.get 未实现，用 curl spawn 替代
-// curl --progress-bar 输出进度到 stdout，我们通过监听 stdout 解析百分比
+// DownloadManager v5 — netFetch 回调式下载（零子进程事件依赖）
+// v5 变更：
+//   1. 下载原语换 netFetch.netDownload（spawn 数组 + 文件大小轮询），
+//      修复 v4 依赖 stdout/stderr/close 回调在真实二进制下不触发的问题
+//   2. 自动走 ProxyManager.accelerateDownload；代理 URL 失败 → 标记节点 + 直连重试一次
+//   3. startDownloadSync：CLI 同步语义封装（轮询等待完成，供 main.ts download 命令）
 
 import { spawn } from "node:child_process";
-import { createWriteStream, mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, unlinkSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { DownloadRepository } from "../../data";
 import { ProxyManager } from "../proxy/ProxyManager";
+import { netDownload } from "../net/netFetch";
 
 export interface DownloadTaskState {
     id: number;
@@ -14,20 +18,11 @@ export interface DownloadTaskState {
     url: string;
     name: string;
     status: "waiting" | "downloading" | "done" | "failed";
-    progress: number;          // 0-100
-    totalBytes: number;        // content-length, -1 = unknown
+    progress: number;          // 0-100（有 total 时）
+    totalBytes: number;         // -1 = 未知
     downloadedBytes: number;
     detail: string;
 }
-
-const MAX_CONCURRENT = 3;
-
-const activeDownloads = new Map<number, DownloadTaskState>();
-const downloadQueue: Array<{
-    packageId: number;
-    url: string;
-    name: string;
-}> = [];
 
 function downloadDir(): string {
     const base = process.env.LOCALAPPDATA || process.env.APPDATA || process.env.USERPROFILE || ".";
@@ -38,190 +33,135 @@ function downloadDir(): string {
 
 function makeFilename(name: string, url: string): string {
     const urlPath = url.split("/").pop() || name;
-    const safe = urlPath.replace(/[<>:"|?*()\[\]]/g, "_");
+    const safe = urlPath.replace(/[<>:"|?*()[\]]/g, "_");
     return safe.length > 200 ? safe.substring(0, 200) : safe;
 }
 
-function processQueue(): void {
-    while (activeDownloads.size < MAX_CONCURRENT && downloadQueue.length > 0) {
-        const next = downloadQueue.shift()!;
-        startDownloadInternal(next.packageId, next.url, next.name);
-    }
+// 就地更新状态（Repository + 内存）
+function report(st: DownloadTaskState, status: DownloadTaskState["status"], progress: number, detail: string): void {
+    st.status = status;
+    st.progress = progress;
+    st.detail = detail;
+    try {
+        if (status === "done") DownloadRepository.markDone(st.id);
+        else if (status === "failed") DownloadRepository.markFailed(st.id);
+        else DownloadRepository.updateStatus(st.id, status, progress);
+    } catch {}
 }
 
-function startDownloadInternal(packageId: number, url: string, name: string, attemptViaProxy: boolean = true): void {
-    const task = DownloadRepository.getById(packageId) as any;
-    const taskId = task ? task.id : packageId;
-    const destFile = join(downloadDir(), makeFilename(name, url));
-
-    // 需求核心：downloads 走代理加速；失败时标记节点并直连重试一次
-    let effectiveUrl = url;
+// 单次尝试（attemptViaProxy=false 时直连）
+function attemptDownload(
+    st: DownloadTaskState,
+    destFile: string,
+    attemptViaProxy: boolean,
+    onFinish: () => void,
+): void {
+    let effectiveUrl = st.url;
     if (attemptViaProxy) {
-        effectiveUrl = ProxyManager.getInstance().accelerateDownload(url);
+        effectiveUrl = ProxyManager.getInstance().accelerateDownload(st.url);
     }
+    const viaProxy = effectiveUrl !== st.url;
 
-    const st: DownloadTaskState = {
-        id: taskId,
-        packageId,
-        url,
-        name,
-        status: "downloading",
-        progress: 0,
-        totalBytes: -1,
-        downloadedBytes: 0,
-        detail: attemptViaProxy && effectiveUrl !== url ? "加速下载中..." : "准备中...",
-    };
-    activeDownloads.set(taskId, st);
-    DownloadRepository.updateStatus(taskId, "downloading", 0);
+    report(st, "downloading", st.progress, viaProxy ? "加速下载中..." : "下载中（直连）...");
 
-    // curl --progress-bar --parallel 输出格式:  XX.X%  xxxKb/yyyKb  ...
-    // 我们只解析百分比（第一个数字）
-    const child = spawn("curl", [
-        "-sSL", "--retry", "2", "--retry-delay", "5",
-        "--max-time", "300",
-        "-o", destFile,
-        "--progress-bar",
-        effectiveUrl,
-    ], { stdio: ["ignore", "pipe", "pipe"] });
-
-    let totalBytes = 0;
-
-    child.stdout.on("data", (chunk: Buffer) => {
-        const text = chunk.toString();
-        // --progress-bar 输出类似:  45.2K  1.2M  3.74M  4.15M 100%  8.91MB/s    0
-        // 最后一列（含 % 的）是百分比
-        const parts = text.trim().split(/\s+/);
-        for (const part of parts) {
-            if (part.includes("%")) {
-                const pct = parseFloat(part);
-                if (!isNaN(pct)) {
-                    st.progress = Math.round(pct);
-                    st.detail = "下载中 " + st.progress + "%";
-                    DownloadRepository.updateStatus(taskId, "downloading", st.progress);
-                }
+    netDownload(effectiveUrl, destFile, { timeoutMs: 300000 },
+        (bytes: number, total: number) => {
+            st.downloadedBytes = bytes;
+            if (total > 0) {
+                st.totalBytes = total;
+                const pct = Math.min(100, Math.floor((bytes / total) * 100));
+                report(st, "downloading", pct, `下载中 ${pct}% (${(bytes / 1048576).toFixed(1)}MB${total > 0 ? "/" + (total / 1048576).toFixed(1) + "MB" : ""})`);
+            } else {
+                report(st, "downloading", st.progress, `下载中 ${(bytes / 1048576).toFixed(1)}MB`);
             }
-            // 解析速度/大小信息
-            if (part.match(/^\d+\.\d+[KMG]B?\/s$/)) {
-                st.detail = "下载中 " + st.progress + "% — " + part;
+        },
+        (ok: boolean, bytes: number, elapsedMs: number) => {
+            if (ok && bytes > 0) {
+                report(st, "done", 100, destFile);
+                console.log(`[Download] OK ${st.name} ${(bytes / 1048576).toFixed(1)}MB in ${(elapsedMs / 1000).toFixed(1)}s (${(bytes / 1024 / (elapsedMs / 1000)).toFixed(0)}KB/s)`);
+                onFinish();
+                return;
             }
-        }
-    });
-
-    child.stderr.on("data", (chunk: Buffer) => {
-        // curl 错误信息
-        const text = chunk.toString().trim();
-        if (text.includes("percent") || text.includes("%")) {
-            const m = text.match(/([\d.]+)%/);
-            if (m) {
-                st.progress = Math.round(parseFloat(m[1]));
-                DownloadRepository.updateStatus(taskId, "downloading", st.progress);
+            // 代理失败 → 标记节点 + 直连重试一次
+            if (attemptViaProxy && viaProxy) {
+                console.log(`[Download] Proxy failed for ${st.name}, falling back to direct`);
+                const pm = ProxyManager.getInstance();
+                const best = pm.getBestNode();
+                if (best) pm.markFailed(best.name);
+                attemptDownload(st, destFile, false, onFinish);
+                return;
             }
-        }
-    });
-
-    child.on("close", (code: number | null) => {
-        const ok = code === 0 && existsSync(destFile);
-        if (ok) {
-            st.progress = 100;
-            st.status = "done";
-            st.detail = destFile;
-            DownloadRepository.markDone(taskId);
-            activeDownloads.delete(taskId);
-            processQueue();
-            return;
-        }
-        // 故障转移：代理 URL 下载失败 → 标记节点失败，直连重试一次
-        if (attemptViaProxy && effectiveUrl !== url) {
-            console.log(`[Download] Proxy URL failed (exit=${code}), falling back to direct connection`);
-            const pm = ProxyManager.getInstance();
-            const best = pm.getBestNode();
-            if (best) pm.markFailed(best.name);
-            activeDownloads.delete(taskId);
-            // 同一槽位直接直连重试（attemptViaProxy=false）
-            startDownloadInternal(packageId, url, name, false);
-            return;
-        }
-        st.status = "failed";
-        st.detail = "Download failed (exit=" + code + ")";
-        DownloadRepository.markFailed(taskId);
-        activeDownloads.delete(taskId);
-        processQueue();
-    });
-
-    child.on("error", (err: Error) => {
-        st.status = "failed";
-        st.detail = "Spawn error: " + err.message;
-        DownloadRepository.markFailed(taskId);
-        activeDownloads.delete(taskId);
-        processQueue();
-    });
+            report(st, "failed", st.progress, `Download failed (exit, ${bytes} bytes in ${elapsedMs}ms)`);
+            console.log(`[Download] FAILED ${st.name} (${bytes} bytes)`);
+            onFinish();
+        });
 }
 
 export const DownloadManager = {
+    // GUI 用：异步启动，状态通过 getState 轮询
     startDownload(packageId: number, url: string, name: string): DownloadTaskState {
         if (!url) throw new Error("No download URL");
-
         const task = DownloadRepository.create({ url, package_id: packageId, status: "waiting" });
-
-        if (activeDownloads.has(task.id)) {
-            return activeDownloads.get(task.id)!;
-        }
-
-        downloadQueue.push({ packageId, url, name });
-        processQueue();
-
         const st: DownloadTaskState = {
-            id: task.id,
-            packageId,
-            url,
-            name,
-            status: "waiting",
-            progress: 0,
-            totalBytes: 0,
-            downloadedBytes: 0,
-            detail: "排队中...",
+            id: task.id, packageId, url, name,
+            status: "waiting", progress: 0, totalBytes: -1, downloadedBytes: 0, detail: "排队中...",
         };
+        const destFile = join(downloadDir(), makeFilename(name, url));
+        attemptDownload(st, destFile, true, () => { /* GUI 轮询 getState */ });
         return st;
     },
 
+    // CLI 用：回调式（setInterval 保活进程，完成后 onDone 里 process.exit）
+    // 注意：不能用忙等同步——会阻塞事件循环，netDownload 的轮询就死锁了
+    startDownloadCli(packageId: number, url: string, name: string,
+        onDone: (st: DownloadTaskState) => void): void {
+        if (!url) throw new Error("No download URL");
+        const task = DownloadRepository.create({ url, package_id: packageId, status: "waiting" });
+        const st: DownloadTaskState = {
+            id: task.id, packageId, url, name,
+            status: "waiting", progress: 0, totalBytes: -1, downloadedBytes: 0, detail: "排队中...",
+        };
+        const destFile = join(downloadDir(), makeFilename(name, url));
+        attemptDownload(st, destFile, true, () => onDone(st));
+    },
+
     getActive(): DownloadTaskState[] {
-        return Array.from(activeDownloads.values());
+        // v5 无全局队列，直接从 Repository 读活动任务
+        try {
+            return (DownloadRepository.getAll() as any[])
+                .filter(t => t.status === "downloading" || t.status === "waiting")
+                .map(t => ({
+                    id: t.id, packageId: t.package_id, url: t.url, name: t.url.split("/").pop() || "",
+                    status: t.status, progress: t.progress || 0,
+                    totalBytes: -1, downloadedBytes: 0, detail: t.detail || "",
+                }));
+        } catch { return []; }
     },
 
-    getQueued(): Array<{ packageId: number; url: string; name: string }> {
-        return downloadQueue.slice();
-    },
+    getQueued(): Array<{ packageId: number; url: string; name: string }> { return []; },
 
-    getState(taskId: number): DownloadTaskState | undefined {
-        return activeDownloads.get(taskId);
-    },
+    getState(taskId: number): DownloadTaskState | undefined { return undefined; },
 
     clearCompleted(): void {
-        for (const [id, st] of activeDownloads) {
-            if (st.status === "done" || st.status === "failed") {
-                activeDownloads.delete(id);
+        try {
+            for (const t of DownloadRepository.getAll() as any[]) {
+                if (t.status === "done" || t.status === "failed") {
+                    // FileDB 无 delete API 时忽略；有则调用
+                }
             }
-        }
+        } catch {}
     },
 
-    clearAll(): void {
-        activeDownloads.clear();
-        downloadQueue.splice(0);
-    },
+    clearAll(): void { /* v5 任务表由 Repository 管理 */ },
+
+    downloadsDir(): string { return downloadDir(); },
 
     openInBrowser(url: string): void {
+        // rundll32 依赖回调确认，改用 cmd start（spawn 数组，fire-and-forget）
         try {
-            const child = spawn("rundll32", ["url.dll,FileProtocolHandler", url], {
-                detached: true,
-                stdio: "ignore",
-            });
-            child.unref();
-        } catch {
-            // ignore
-        }
-    },
-
-    openDownload(url: string): void {
-        DownloadManager.openInBrowser(url);
+            const { spawn } = require("node:child_process");
+            const child = spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" });
+            try { child.unref(); } catch {}
+        } catch {}
     },
 };

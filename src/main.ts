@@ -1,8 +1,11 @@
-// 仓鼠软库 CLI v1.2 — 统一同步入口（底层 RepoSyncEngine）
-import { initDatabase, SourceRepository, PackageRepository } from "./data";
+// 仓鼠软库 CLI v1.4 — 统一入口（netFetch 回调式网络）
+import { initDatabase, SourceRepository, PackageRepository, DownloadRepository } from "./data";
 import { initSeedSources } from "./core/sync/seedRepos";
-import { SourceSyncer } from "./core/sync/SyncFacade";
+import { SourceSyncer } from "./core/sync/SourceSyncer";
 import { GitHubSearchEngine } from "./core/discovery/GitHubSearchEngine";
+import { GitHubAPIClient } from "./core/sync/GitHubAPIClient";
+import { ProxyManager } from "./core/proxy/ProxyManager";
+import { DownloadManager } from "./core/download/DownloadManager";
 
 function parseArgs(argv: string[]): { command: string; args: string[]; options: Record<string, string> } {
     const a = argv.slice(2);
@@ -20,7 +23,7 @@ function parseArgs(argv: string[]): { command: string; args: string[]; options: 
 
 function main(): void {
     const { command, args, options } = parseArgs(process.argv);
-    console.log("仓鼠软库 v1.0");
+    console.log("仓鼠软库 v1.4");
 
     initDatabase();
     initSeedSources();
@@ -35,11 +38,18 @@ function main(): void {
             break;
         }
 
-        case "discover": {
-            const syncer = new SourceSyncer(token);
+        case "discover":
+        case "search-online": {
             console.log("搜索 GitHub 公开仓库...\n");
-            const n = syncer.syncFromDiscovery();
-            console.log("\n发现: " + n + " 个新软件");
+            const engine = new GitHubSearchEngine(token);
+            const kw = args[0] || "awesome windows";
+            engine.searchByKeyword(kw, 10, (results) => {
+                console.log("GitHub 找到 " + results.length + " 个结果:");
+                for (const r of results) {
+                    console.log("  " + r.full_name + " ★" + r.stargazers_count + " — " + (r.description || "").substring(0, 60));
+                }
+                process.exit(0);
+            });
             break;
         }
 
@@ -47,15 +57,10 @@ function main(): void {
             const sources = SourceRepository.getAll();
             console.log("\n种子仓库 (" + sources.length + "):");
             for (const s of sources) {
-                console.log("  " + s.owner + "/" + s.repo + " [" + s.parser_config + "]");
+                console.log("  " + s.owner + "/" + s.repo + (s.source_type ? " [" + s.source_type + "]" : ""));
             }
             const pkgs = PackageRepository.getAll();
-            console.log("\n软件包 (" + pkgs.length + "):");
-            for (const p of pkgs) {
-                const cats = JSON.parse(p.categories || "[]");
-                const catLabel = Array.isArray(cats) ? cats.join("/") : "";
-                console.log("  " + p.id + " | " + p.name + " | " + catLabel);
-            }
+            console.log("\n软件包 (" + pkgs.length + ")");
             break;
         }
 
@@ -63,16 +68,17 @@ function main(): void {
             const pkgs = PackageRepository.getAll();
             const catCounts: Record<string, number> = {};
             for (const p of pkgs) {
-                const cats = JSON.parse(p.categories || "[]");
-                if (Array.isArray(cats)) {
-                    for (const c of cats) {
-                        catCounts[c] = (catCounts[c] || 0) + 1;
+                try {
+                    const cats = JSON.parse(p.categories || "[]");
+                    if (Array.isArray(cats)) {
+                        for (const c of cats) catCounts[c] = (catCounts[c] || 0) + 1;
                     }
-                }
+                } catch {}
             }
             console.log("\n分类统计:");
-            for (const [cat, count] of Object.entries(catCounts).sort()) {
-                console.log("  " + cat + ": " + count + " 个");
+            const keys = Object.keys(catCounts).sort((a, b) => catCounts[b] - catCounts[a]);
+            for (const k of keys) {
+                console.log("  " + k + ": " + catCounts[k]);
             }
             break;
         }
@@ -84,18 +90,14 @@ function main(): void {
             const matched = PackageRepository.search(keyword, 20);
             if (matched.length === 0) {
                 console.log("  本地无匹配 — 尝试从 GitHub 在线搜索...");
-                const syncer = new SourceSyncer(token);
                 const engine = new GitHubSearchEngine(token);
-                const results = engine.searchByKeyword(keyword, 1);
-                console.log("  GitHub 找到 " + results.length + " 个结果:");
-                for (const r of results.slice(0, 10)) {
-                    console.log("    " + r.full_name + " ★" + r.stargazers_count + " — " + (r.description || "").substring(0, 60));
-                }
-                let added = 0;
-                for (const r of results) {
-                    if (syncer.savePackageFromSearchPublic(r)) added++;
-                }
-                console.log("\n  入库: " + added + " 个新软件");
+                engine.searchByKeyword(keyword, 10, (results) => {
+                    console.log("  GitHub 找到 " + results.length + " 个结果:");
+                    for (const r of results) {
+                        console.log("    " + r.full_name + " ★" + r.stargazers_count + " — " + (r.description || "").substring(0, 60));
+                    }
+                    process.exit(0);
+                });
             } else {
                 console.log("  本地匹配 " + matched.length + " 个:");
                 for (const p of matched) {
@@ -127,19 +129,100 @@ function main(): void {
             break;
         }
 
+        case "proxy": {
+            const pm = ProxyManager.getInstance();
+            pm.init();  // 触发后台测速（回调式）
+            // 等 12s 让测速跑完再打印（CLI 无 UI，靠 setInterval 保活）
+            setTimeout(() => {
+                const st = pm.getStatus();
+                console.log("\n加速器状态:");
+                console.log("  启用:     " + (pm.isProxyEnabled() ? "是" : "否"));
+                console.log("  状态:     " + (st.connected ? "已连接" : (st.measuring ? "测速中" : "未连接（直连）")));
+                console.log("  当前节点: " + st.nodeName + (st.latency > 0 ? " (" + st.latency + "ms)" : ""));
+                console.log("  节点列表:");
+                for (const n of pm.getAllNodes()) {
+                    const mark = n.enabled ? (n.latency > 0 ? "OK " + n.latency + "ms" : "-") : "X";
+                    console.log("    [" + mark + "] " + n.name + " (" + n.mode + ")");
+                }
+                process.exit(0);
+            }, 12000);
+            break;
+        }
+
+        case "download": {
+            const id = parseInt(args[0] || "0", 10);
+            if (!id) { console.log("用法: download <软件ID>  (从 info 查看 download_url)"); break; }
+            const p = PackageRepository.getById(id);
+            if (!p) { console.log("未找到 ID=" + id); break; }
+            let url = "";
+            try { url = JSON.parse(p.extra_json || "{}").download_url || ""; } catch {}
+            // 项目页 URL（无资产路径）→ 需要走 release API 拿真实资产
+            const isProjectPage = !url || /^https:\/\/github\.com\/[^\/]+\/[^\/]+\/?$/.test(url);
+            if (isProjectPage) {
+                // 回退：直接用 project_url 拼最新 release（调 API 拿真实资产）
+                console.log("该包无预置 download_url，尝试获取最新 release...");
+                const ownerRepo = parseOwnerRepo(p.name);
+                if (!ownerRepo) { console.log("无法解析 owner/repo，中止"); break; }
+                const client = new GitHubAPIClient(token);
+                client.getLatestRelease(ownerRepo.owner, ownerRepo.repo, (rel) => {
+                    if (!rel || !rel.assets || rel.assets.length === 0) {
+                        console.log("未找到 release 资产，中止");
+                        process.exit(1);
+                    }
+                    // 选 Windows 资产（严格优先 x86_64-pc-windows-msvc/GNU，排除 mac/linux）
+                    const winAsset = rel.assets.find((a: any) => /x86_64-pc-windows|windows.*x86_64|x86_64.*windows/i.test(a.name)) ||
+                        rel.assets.find((a: any) => /\.exe$|\.msi$|\.zip$/i.test(a.name) && !/darwin|linux|aarch64|arm/i.test(a.name)) ||
+                        rel.assets[0];
+                    console.log("Release: " + rel.tag_name + " → " + winAsset.name);
+                    startCliDownload(p.id, winAsset.browser_download_url, winAsset.name);
+                });
+                break;
+            }
+            startCliDownload(p.id, url, (url.split("/").pop() || "download"), token);
+            break;
+        }
+
         case "help":
         default:
-            console.log("\n仓鼠软库 v1.0\n");
-            console.log("  sync        拉取种子仓库 + 公开搜索\n");
-            console.log("  discover    从 GitHub 搜索新软件\n");
-            console.log("  search <kw> 按关键词搜索（本地→GitHub）\n");
-            console.log("  info <id>   查看软件详情\n");
-            console.log("  list        显示仓库 + 软件包（含分类）\n");
-            console.log("  categories  显示分类统计\n");
-            console.log("  help        帮助\n");
+            console.log("\n仓鼠软库 v1.4\n");
+            console.log("  sync              同步内置数据到本地库");
+            console.log("  discover [kw]     从 GitHub 在线搜索新软件\n");
+            console.log("  search <kw>       按关键词搜索（本地→GitHub）\n");
+            console.log("  download <id>     下载软件（经加速器，自动直连回退）\n");
+            console.log("  proxy             查看加速器状态（自动测速）\n");
+            console.log("  info <id>         查看软件详情");
+            console.log("  list              显示仓库 + 软件包");
+            console.log("  categories        显示分类统计");
+            console.log("  help              帮助\n");
             console.log("选项: --token <PAT>\n");
-            console.log("无 token 时采用爬虫方案\n");
     }
+}
+
+function parseOwnerRepo(name: string): { owner: string; repo: string } | null {
+    const m = name.match(/^([^\/]+)\/([^\/]+)$/);
+    if (m) return { owner: m[1], repo: m[2] };
+    return null;
+}
+
+function startCliDownload(packageId: number, url: string, name: string): void {
+    console.log("开始下载: " + name);
+    console.log("URL: " + url);
+    const pm = ProxyManager.getInstance();
+    pm.init();
+    // 等 2s 让代理测速尽可能先出结果（预算 10s 内，第一节点通常 <1s）
+    setTimeout(() => {
+        const accel = pm.accelerateDownload(url);
+        console.log(accel !== url ? "经加速节点下载: " + accel : "直连下载（无可用加速节点）");
+        DownloadManager.startDownloadCli(packageId, url, name, (st) => {
+            if (st.status === "done") {
+                console.log("\n下载完成: " + st.detail);
+                process.exit(0);
+            } else {
+                console.log("\n下载失败: " + st.detail);
+                process.exit(1);
+            }
+        });
+    }, 2000);
 }
 
 try { main(); } catch (e: any) { console.error("错误: " + e.message); process.exit(1); }

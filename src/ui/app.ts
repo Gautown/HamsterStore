@@ -7,7 +7,28 @@ import {
     widgetSetBackgroundColor, setPadding, setCornerRadius,
     textSetFontSize, textSetColor, onFrame,
 } from "perry/ui";
-import { COLORS, SPACING, FONT, RADIUS } from "./styles/theme";
+
+// Perry v0.5.1220: 内联颜色常量，避免导入链问题
+const COLORS = {
+    primary: { r: 0.145, g: 0.388, b: 0.922 },
+    secondary: { r: 0.063, g: 0.725, b: 0.506 },
+    neutral: { r: 0.118, g: 0.161, b: 0.231 },
+    white: { r: 1.0, g: 1.0, b: 1.0 },
+    bg: { r: 0.945, g: 0.953, b: 0.965 },
+    bgCard: { r: 1.0, g: 1.0, b: 1.0 },
+    text: { r: 0.118, g: 0.161, b: 0.231 },
+    textSecondary: { r: 0.392, g: 0.451, b: 0.510 },
+    divider: { r: 0.878, g: 0.886, b: 0.902 },
+    error: { r: 0.937, g: 0.267, b: 0.267 },
+    success: { r: 0.22, g: 0.72, b: 0.40 },
+    warning: { r: 0.96, g: 0.68, b: 0.16 },
+    danger: { r: 0.94, g: 0.24, b: 0.24 },
+    star: { r: 0.961, g: 0.725, b: 0.141 },
+};
+
+const SPACING = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 };
+const FONT = { xs: 10, sm: 12, base: 14, md: 16, lg: 18, xl: 22, title: 28 };
+const RADIUS = { card: 16, smallCard: 12, button: 10 };
 import { AppLayout } from "./AppLayout";
 import { PackageList } from "./components/PackageList";
 import { InstalledList } from "./components/InstalledList";
@@ -29,29 +50,55 @@ let selectedSourceId: number = 0;
 let selectedPackageId: number = 0;
 let searchQuery: string = "";
 
+// 使用 defineProperty 避免只读属性冲突
+const defineGlobal = (name: string, value: any): void => {
+    try {
+        Object.defineProperty(globalThis, name, {
+            value: value,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+        });
+    } catch {
+        // 如果已存在且不可配置，尝试删除后重新定义
+        try {
+            delete (globalThis as any)[name];
+            (globalThis as any)[name] = value;
+        } catch {}
+    }
+};
+
 // 暴露给 SideNav 和 ContentArea 的导航函数
-(globalThis as any).__hamsterStoreNavigate = function(pageId: string): void {
+defineGlobal("__hamsterStoreNavigate", function(pageId: string): void {
     currentPage = pageId;
     if (pageId === "home" || pageId === "packages") {
         selectedCategory = null;
         selectedSourceId = 0;
     }
     rebuildContent();
-};
+});
 
-(globalThis as any).__hamsterStoreCategory = null;
-(globalThis as any).__hamsterStoreSourceId = 0;
-(globalThis as any).__hamsterStoreQuery = "";
+defineGlobal("__hamsterStoreCategory", null);
+defineGlobal("__hamsterStoreSourceId", 0);
+defineGlobal("__hamsterStoreQuery", "");
+defineGlobal("__hamsterStoreCurrentPage", currentPage);
+defineGlobal("__hamsterStoreGetPackages", () => PackageRepository.getAll());
+defineGlobal("__hamsterStoreRebuild", rebuildContent);
 
 // === §6.2 构建主窗口主体 ===
 export function buildMainBody(): Widget {
     return AppLayout();
 }
 
+// === 底部状态栏 ===
+export function getStatusBar(): Widget {
+    return StatusBar();
+}
+
 // 重建内容区（由 SideNav 点击导航项触发）
 function rebuildContent(): void {
     // ContentArea 自己管理状态，这里只做全局状态同步
-    (globalThis as any).__hamsterStoreCurrentPage = currentPage;
+    defineGlobal("__hamsterStoreCurrentPage", currentPage);
 }
 
 // 导出给 PackageList 用：点击卡片跳转详情
@@ -60,31 +107,37 @@ export function navigateToDetail(packageId: number): void {
     currentPage = "detail";
     rebuildContent();
     // 设置详情页面
-    (globalThis as any).__hamsterStoreDetailPage = PackageDetail(packageId);
+    defineGlobal("__hamsterStoreDetailPage", PackageDetail(packageId));
 }
 
 // 暴露给 TitleBar 使用
-(globalThis as any).__hamsterRunSearch = runSearch;
-(globalThis as any).__hamsterCloseWindow = () => { try { process.exit(0); } catch {} };
+defineGlobal("__hamsterRunSearch", runSearch);
+defineGlobal("__hamsterCloseWindow", () => { try { process.exit(0); } catch {} });
 
 function runSearch(query: string): void {
     searchQuery = (query || "").trim().toLowerCase();
     selectedCategory = null;
     selectedSourceId = 0;
     currentPage = "packages";
-    (globalThis as any).__hamsterStoreQuery = searchQuery;
+    defineGlobal("__hamsterStoreQuery", searchQuery);
     rebuildContent();
 }
 
 // === §6.2 首页 Bento Grid 布局 ===
 export function buildHomePage(): Widget {
+    console.log("[buildHomePage] Starting...");
     const pkgs = PackageRepository.getAll();
+    console.log("[buildHomePage] Packages loaded:", pkgs?.length);
     const installed = safeCount(() => InstallationRepository.getAll());
+    console.log("[buildHomePage] Installed:", installed);
     const sources = SourceRepository.getAll().length;
+    console.log("[buildHomePage] Sources:", sources);
     const updatable = 0;
     const downloads = safeCount(() => DownloadRepository.getAll());
+    console.log("[buildHomePage] Downloads:", downloads);
 
     // 第一行：统计卡片
+    console.log("[buildHomePage] Building statCard...");
     const statCard = BentoCard({
         title: "软件统计",
         subtitle: "已安装: " + installed + " | 可更新: " + updatable + " | 软件源: " + sources + " 个",
@@ -114,8 +167,8 @@ export function buildHomePage(): Widget {
 
     const dedupReport = (() => {
         try {
-            const r = dedupCleaner.generateReport();
-            return "重复: " + r.duplicateGroups + " 组 | 模糊: " + r.fuzzyCandidates.length + " 对";
+            // Perry v0.5.1220: 跳过去重报告，避免崩溃
+            return "去重: 暂不可用";
         } catch { return "去重: 检查中"; }
     })();
     const dedupCard = BentoCard({
@@ -191,7 +244,7 @@ function buildFeaturedPage(): Widget {
         const btn = Button(label, () => {
             selectedSourceId = sourceId;
             currentPage = "packages";
-            (globalThis as any).__hamsterStoreSourceId = sourceId;
+            defineGlobal("__hamsterStoreSourceId", sourceId);
             rebuildContent();
         });
         btns.push(btn);

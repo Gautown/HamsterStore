@@ -17,12 +17,13 @@ export interface ProxyNode {
 // replace 类：镜像站直接替换 github.com 域名（kkgithub/githubproxy）
 // prefix 类：代理站把完整原始 URL 拼在后面（ghfast.top/gh-proxy）
 export const DEFAULT_PROXY_NODES: ProxyNode[] = [
-    { name: "githubproxy.cc", url: "https://githubproxy.cc", type: "mirror", mode: "replace", priority: 1, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
-    { name: "ghfast.top",     url: "https://ghfast.top",     type: "mirror", mode: "prefix",  priority: 2, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
-    { name: "kkgithub.com",   url: "https://kkgithub.com",   type: "mirror", mode: "replace", priority: 3, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
-    { name: "gh-proxy.org",   url: "https://gh-proxy.org",   type: "proxy",  mode: "prefix",  priority: 4, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
-    { name: "mirror.ghproxy.com", url: "https://mirror.ghproxy.com", type: "proxy", mode: "prefix", priority: 5, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
-    { name: "hub.fastgit.xyz", url: "https://hub.fastgit.xyz", type: "mirror", mode: "replace", priority: 6, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
+    { name: "gh-proxy.org",   url: "https://gh-proxy.org",   type: "proxy",  mode: "prefix",  priority: 1, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
+    { name: "githubproxy.cc", url: "https://githubproxy.cc", type: "mirror", mode: "replace", priority: 2, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
+    { name: "ghproxy.net",    url: "https://ghproxy.net",    type: "proxy",  mode: "prefix",  priority: 3, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
+    { name: "ghfast.top",     url: "https://ghfast.top",     type: "mirror", mode: "prefix",  priority: 4, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
+    { name: "kkgithub.com",   url: "https://kkgithub.com",   type: "mirror", mode: "replace", priority: 5, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
+    { name: "mirror.ghproxy.com", url: "https://mirror.ghproxy.com", type: "proxy", mode: "prefix", priority: 6, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
+    { name: "hub.fastgit.xyz", url: "https://hub.fastgit.xyz", type: "mirror", mode: "replace", priority: 7, enabled: true, latency: 0, lastCheck: 0, failures: 0 },
 ];
 
 // 最大连续失败次数，超过则禁用该节点
