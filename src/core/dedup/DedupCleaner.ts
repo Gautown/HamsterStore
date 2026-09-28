@@ -4,6 +4,7 @@
 import { PackageRepository, DedupRepository } from "../../data";
 import type { Package } from "../../data/models/Package";
 import { DedupEngine } from "./DedupEngine";
+import { ThreadPool, resolvePoolSize } from "../concurrent";
 
 export interface DedupGroup {
     urlHash: string;
@@ -23,6 +24,21 @@ export interface DedupReport {
 
 export class DedupCleaner {
     private engine = new DedupEngine();
+    private pool: ThreadPool | null = null;
+    private lastParallelUsed: boolean = false;
+
+    // 惰性创建并行执行器（并行度取设置项 thread_pool_size，0 = 自动）
+    private getPool(): ThreadPool {
+        if (!this.pool) {
+            this.pool = new ThreadPool({ maxWorkers: resolvePoolSize(0), minParallelBatch: 50 });
+        }
+        return this.pool;
+    }
+
+    /** 上次模糊匹配是否走了并行路径（UI/CLI 展示用） */
+    get parallelUsed(): boolean {
+        return this.lastParallelUsed;
+    }
 
     // 按 url_hash 分组，找出所有重复
     findDuplicateGroups(): DedupGroup[] {
@@ -61,9 +77,12 @@ export class DedupCleaner {
     }
 
     // 模糊匹配：找名称相似但 url_hash 不同的包
-    findFuzzyCandidates(): Array<{ pkg: Package; match: Package; score: number }> {
+    // 三阶段（开发文档 §4.3.3 / §8.9.3）：
+    //   ① 串行枚举候选对（受 name token 索引加速）
+    //   ② 并行打分（CPU 密集，ThreadPool 分片到多核）
+    //   ③ 串行回主线程按阈值筛选排序（副作用集中在主线程）
+    findFuzzyCandidates(parallel: boolean = true): Array<{ pkg: Package; match: Package; score: number }> {
         const all = PackageRepository.getAll();
-        const candidates: Array<{ pkg: Package; match: Package; score: number }> = [];
 
         // 用 name token 索引加速
         const nameIndex = new Map<string, Package[]>();
@@ -75,7 +94,11 @@ export class DedupCleaner {
             }
         }
 
+        // ① 枚举去重后的候选对
         const seen = new Set<string>();
+        const pairs: Array<{ a: string; b: string }> = [];
+        const refs: Array<{ pkg: Package; match: Package }> = [];
+
         for (const pkg of all) {
             const tokens = this.engine.tokenize(pkg.name || "");
             const potential = new Set<Package>();
@@ -92,33 +115,31 @@ export class DedupCleaner {
                 const pairKey = [pkg.id, match.id].sort().join("-");
                 if (seen.has(pairKey)) continue;
                 seen.add(pairKey);
+                pairs.push({ a: pkg.name || "", b: match.name || "" });
+                refs.push({ pkg, match });
+            }
+        }
 
-                const score = this.computeSimilarity(pkg.name || "", match.name || "");
-                if (score >= 0.75) {
-                    candidates.push({ pkg, match, score });
-                }
+        // ② 打分：候选对达到并行阈值才付线程调度开销
+        this.lastParallelUsed = parallel && pairs.length >= 50;
+        const scores = this.lastParallelUsed
+            ? this.engine.scorePairsParallel(pairs, this.getPool())
+            : pairs.map(p => this.engine.similarity(p.a, p.b));
+
+        // ③ 筛选 + 排序（主线程串行）
+        const candidates: Array<{ pkg: Package; match: Package; score: number }> = [];
+        for (let i = 0; i < refs.length; i++) {
+            if (scores[i] >= 0.75) {
+                candidates.push({ pkg: refs[i].pkg, match: refs[i].match, score: scores[i] });
             }
         }
 
         return candidates.sort((a, b) => b.score - a.score);
     }
 
-    // 计算两个名称的相似度（Jaccard + 前缀加权）
+    // 名称相似度（统一委托 DedupEngine，消除此前的重复实现）
     private computeSimilarity(a: string, b: string): number {
-        const tokensA = this.engine.tokenize(a);
-        const tokensB = this.engine.tokenize(b);
-
-        const intersection = tokensA.filter(t => tokensB.includes(t));
-        const union = new Set([...tokensA, ...tokensB]);
-        const jaccard = union.size > 0 ? intersection.length / union.size : 0;
-
-        const isSubset = tokensA.every(t => tokensB.includes(t)) ||
-                         tokensB.every(t => tokensA.includes(t));
-        let score = jaccard;
-        if (isSubset) score += 0.1;
-        if (a.startsWith(b) || b.startsWith(a)) score += 0.4;
-
-        return Math.min(score, 1.0);
+        return this.engine.similarity(a, b);
     }
 
     // 生成完整报告

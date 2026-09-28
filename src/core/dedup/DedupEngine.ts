@@ -4,6 +4,7 @@
 
 import { DedupRepository, PackageRepository, type Package } from "../../data";
 import type { DedupMap } from "../../data/models/DedupMap";
+import type { ThreadPool } from "../concurrent";
 
 export type MergeMethod = 'exact' | 'fuzzy' | 'new' | 'manual';
 
@@ -37,27 +38,15 @@ export class DedupEngine {
         return found;
     }
 
-    // 模糊去重：Jaccard 相似度 — 查找候选匹配
+    // 模糊去重：查找最佳候选匹配（复用 similarity，避免第二份实现漂移）
     findFuzzyMatch(name: string, candidates: Package[]): Package | null {
         if (!candidates.length) return null;
 
-        const nameTokens = this.tokenize(name);
         let bestScore = 0;
         let best: Package | null = null;
 
         for (const cand of candidates) {
-            const candTokens = this.tokenize(cand.name);
-            const intersection = nameTokens.filter(t => candTokens.includes(t));
-            const union = new Set([...nameTokens, ...candTokens]);
-            const jaccard = intersection.length / union.size;
-
-            const isSubset = nameTokens.every(t => candTokens.includes(t))
-                          || candTokens.every(t => nameTokens.includes(t));
-            let score = jaccard;
-            if (isSubset) score += 0.1 * this.prefixWeight;
-            if (name.startsWith(cand.name) || cand.name.startsWith(name)) {
-                score += this.prefixWeight;
-            }
+            const score = this.similarity(name, cand.name || "");
             if (score > bestScore && score >= this.fuzzyThreshold) {
                 bestScore = score;
                 best = cand;
@@ -101,12 +90,46 @@ export class DedupEngine {
     }
 
     // 名称归一化（tokenize）
-    private tokenize(name: string): string[] {
-        return name
-            .toLowerCase()
-            .replace(/[-_]/g, ' ')
-            .replace(/[^a-z0-9\s]/g, '')
-            .split(/\s+/)
-            .filter(w => w.length > 0);
+    //  Perry 坑（0.5.1520 实测）：正则字面量在 .replace()/.split() 中会导致链接期
+    //    `undefined symbol: js_regexp_new / js_string_replace_regex`（编译通过、链接失败）。
+    //    必须改用字符遍历实现。此处同时由 private 改为 public：DedupCleaner 已在跨类调用它。
+    tokenize(name: string): string[] {
+        const lower = (name || "").toLowerCase();
+        let normalized = "";
+        for (let i = 0; i < lower.length; i++) {
+            const c = lower.charAt(i);
+            if (c === "-" || c === "_" || c === " " || c === "\t") normalized += " ";
+            else if ((c >= "a" && c <= "z") || (c >= "0" && c <= "9")) normalized += c;
+        }
+        return normalized.split(" ").filter(w => w.length > 0);
+    }
+
+    // 相似度：Jaccard + 子集加权 + 前缀加权（统一实现，避免 DedupCleaner 出现第二份漂移逻辑）
+    similarity(a: string, b: string): number {
+        const tokensA = this.tokenize(a);
+        const tokensB = this.tokenize(b);
+        let inter = 0;
+        for (const t of tokensA) {
+            if (tokensB.indexOf(t) >= 0) inter++;
+        }
+        const unionSize = tokensA.length + tokensB.length - inter;
+        const jaccard = unionSize > 0 ? inter / unionSize : 0;
+
+        const isSubset = tokensA.every(t => tokensB.indexOf(t) >= 0) ||
+                         tokensB.every(t => tokensA.indexOf(t) >= 0);
+        let score = jaccard;
+        if (isSubset) score += 0.1 * this.prefixWeight;
+        if (a.startsWith(b) || b.startsWith(a)) score += this.prefixWeight;
+        return Math.min(score, 1.0);
+    }
+
+    // 并行批量打分（开发文档 §8.9.3「去重引擎：条目分片并行计算相似度」）
+    // pairs 为待评估的名称对；返回数组与 pairs 顺序严格一致。
+    scorePairsParallel(pairs: Array<{ a: string; b: string }>, pool: ThreadPool): number[] {
+        return pool.mapParallel<{ a: string; b: string }, number>(
+            pairs,
+            (p: { a: string; b: string }) => this.similarity(p.a, p.b),
+            "dedup-score"
+        );
     }
 }

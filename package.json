@@ -13,11 +13,20 @@
     "test": "echo 'Run tests manually: compile test/*.ts with perry'",
     "clean": "rm -rf dist"
   },
-  "keywords": ["github", "proxy", "download", "trending", "accelerate", "perry", "hamsterstore", "filedb"],
+  "keywords": [
+    "github",
+    "proxy",
+    "download",
+    "trending",
+    "accelerate",
+    "perry",
+    "hamsterstore",
+    "filedb"
+  ],
   "author": "HamsterStore Team",
   "license": "MIT",
   "dependencies": {
-    "@perryts/perry": "^0.5.1220"
+    "@perryts/perry": "^0.5.1520"
   },
   "devDependencies": {
     "tsx": "^4.23.1"

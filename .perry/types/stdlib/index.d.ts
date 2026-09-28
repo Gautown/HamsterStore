@@ -1,12 +1,17 @@
 // Auto-generated from Perry's API manifest (#465). Do not edit by hand.
 // Source: perry-api-manifest::API_MANIFEST
-// Coverage: 1943 entries across 113 modules
+// Coverage: 2067 entries across 136 modules
 
+type PerryI8 = number & { readonly __perryI8?: never };
+type PerryI16 = number & { readonly __perryI16?: never };
+type PerryU8 = number & { readonly __perryU8?: never };
+type PerryU16 = number & { readonly __perryU16?: never };
 type PerryU32 = number & { readonly __perryU32?: never };
 type PerryU64 = number & { readonly __perryU64?: never };
 type PerryUSize = number & { readonly __perryUSize?: never };
 type PerryI32 = number & { readonly __perryI32?: never };
 type PerryI64 = number & { readonly __perryI64?: never };
+type PerryISize = number & { readonly __perryISize?: never };
 type PerryF32 = number & { readonly __perryF32?: never };
 type PerryF64 = number & { readonly __perryF64?: never };
 type PerryBufferLen = number & { readonly __perryBufferLen?: never };
@@ -52,6 +57,67 @@ interface NativeMemoryConstructor {
   copy(dst: NativeMemoryTypedView, src: NativeMemoryTypedView): void;
 }
 declare const NativeMemory: NativeMemoryConstructor;
+
+declare module "@lydell/node-pty" {
+  /** stdlib */
+  const _default: any;
+  export default _default;
+  /** stdlib */
+  export function spawn(...args: any[]): any;
+}
+
+declare module "@parcel/watcher" {
+  /** stdlib */
+  export function __nativeEventCount(): number;
+  /** stdlib */
+  export function getEventsSince(dir: string, snapshot: string, options: any): Promise<any>;
+  /** stdlib */
+  export function subscribe(dir: string, callback: any, options: any): Promise<any>;
+  /** stdlib */
+  export function unsubscribe(dir: string, callback: any, options: any): Promise<any>;
+  /** stdlib */
+  export function writeSnapshot(dir: string, snapshot: string, options: any): Promise<any>;
+}
+
+declare module "@parcel/watcher-darwin-arm64" {
+  /** stdlib */
+  export function subscribe(...args: any[]): any;
+}
+
+declare module "@parcel/watcher-darwin-x64" {
+  /** stdlib */
+  export function subscribe(...args: any[]): any;
+}
+
+declare module "@parcel/watcher-linux-arm64-glibc" {
+  /** stdlib */
+  export function subscribe(...args: any[]): any;
+}
+
+declare module "@parcel/watcher-linux-arm64-musl" {
+  /** stdlib */
+  export function subscribe(...args: any[]): any;
+}
+
+declare module "@parcel/watcher-linux-x64-glibc" {
+  /** stdlib */
+  export function subscribe(...args: any[]): any;
+}
+
+declare module "@parcel/watcher-linux-x64-musl" {
+  /** stdlib */
+  export function subscribe(...args: any[]): any;
+}
+
+declare module "@parcel/watcher-win32-arm64" {
+  /** stdlib */
+  export function subscribe(...args: any[]): any;
+}
+
+declare module "@parcel/watcher-win32-x64" {
+  /** stdlib */
+  export function subscribe(...args: any[]): any;
+}
 
 declare module "@perryts/pdf" {
   /** stdlib */
@@ -197,8 +263,6 @@ declare module "axios" {
   /** stdlib */
   export function create(...args: any[]): any;
   /** stdlib */
-  export default function (...args: any[]): any;
-  /** stdlib */
   function _delete(...args: any[]): any;
   export { _delete as delete };
   /** stdlib */
@@ -215,6 +279,20 @@ declare module "axios" {
   export function put(...args: any[]): any;
   /** stdlib */
   export function request(...args: any[]): any;
+  /** stdlib */
+  const _default: ((...args: any[]) => any) & {
+    all: typeof all;
+    create: typeof create;
+    delete: typeof _delete;
+    get: typeof get;
+    head: typeof head;
+    options: typeof options;
+    patch: typeof patch;
+    post: typeof post;
+    put: typeof put;
+    request: typeof request;
+  };
+  export default _default;
 }
 
 declare module "bcrypt" {
@@ -261,6 +339,71 @@ declare module "buffer" {
   export function resolveObjectURL(...args: any[]): any;
   /** stdlib */
   export function transcode(...args: any[]): any;
+}
+
+declare module "bun" {
+  /** stdlib */
+  export const stderr: any;
+  /** stdlib */
+  export const stdin: any;
+  /** stdlib */
+  export const stdout: any;
+  /** stdlib */
+  export function Glob(...args: any[]): any;
+  /** stdlib */
+  export function file(...args: any[]): any;
+  /** stdlib */
+  export function fileURLToPath(...args: any[]): any;
+  /** stdlib */
+  export function hash(...args: any[]): any;
+  /** stdlib */
+  export function pathToFileURL(...args: any[]): any;
+  /** stdlib */
+  export function stringWidth(...args: any[]): any;
+  /** stdlib */
+  export function unsupported(...args: any[]): any;
+  /** stdlib */
+  export function write(...args: any[]): any;
+}
+
+declare module "bun:ffi" {
+  /** stdlib */
+  export const FFIType: any;
+  /** stdlib */
+  export const read: any;
+  /** stdlib */
+  export const suffix: any;
+  /** stdlib */
+  export function CFunction(...args: any[]): any;
+  /** stdlib */
+  export function CString(...args: any[]): any;
+  /** stdlib */
+  export function JSCallback(...args: any[]): any;
+  /** stdlib */
+  export function dlopen(...args: any[]): any;
+  /** stdlib */
+  export function linkSymbols(...args: any[]): any;
+  /** stdlib */
+  export function ptr(...args: any[]): any;
+  /** stdlib */
+  export function toArrayBuffer(...args: any[]): any;
+  /** stdlib */
+  export function toBuffer(...args: any[]): any;
+  /** stdlib */
+  export function viewSource(...args: any[]): any;
+}
+
+declare module "bun:sqlite" {
+  /** stdlib */
+  export class Database { [key: string]: any; }
+  /** stdlib */
+  export class Statement { [key: string]: any; }
+  /** stdlib */
+  export const filename: any;
+  /** stdlib */
+  export const inTransaction: any;
+  /** stdlib */
+  export function Database(...args: any[]): any;
 }
 
 declare module "cheerio" {
@@ -862,6 +1005,8 @@ declare module "constants" {
 
 declare module "cron" {
   /** stdlib */
+  export class CronJob { [key: string]: any; }
+  /** stdlib */
   export function describe(expr: string): string;
   /** stdlib */
   export function schedule(expr: string, handler: any): any;
@@ -1037,9 +1182,9 @@ declare module "date-fns" {
 
 declare module "dayjs" {
   /** stdlib */
-  export function dayjs(...args: any[]): any;
+  export function dayjs(input?: any): any;
   /** stdlib */
-  export default function (...args: any[]): any;
+  export default function (input?: any): any;
 }
 
 declare module "dgram" {
@@ -1358,6 +1503,8 @@ declare module "domain" {
 declare module "dotenv" {
   /** stdlib */
   export function config(...args: any[]): any;
+  /** stdlib */
+  export function parse(src: string): any;
 }
 
 declare module "ethers" {
@@ -1436,6 +1583,21 @@ declare module "fetch" {
   export class Response { [key: string]: any; }
   /** stdlib */
   export default function (...args: any[]): any;
+}
+
+declare module "ffi" {
+  /** stdlib */
+  export const suffix: any;
+  /** stdlib */
+  export function dlopen(...args: any[]): any;
+  /** stdlib */
+  export function getRawPointer(...args: any[]): any;
+  /** stdlib */
+  export function toArrayBuffer(...args: any[]): any;
+  /** stdlib */
+  export function toBuffer(...args: any[]): any;
+  /** stdlib */
+  export function toString(...args: any[]): any;
 }
 
 declare module "fs" {
@@ -1864,6 +2026,13 @@ declare module "ioredis" {
   export function createClient(p0: any): any;
 }
 
+declare module "iovalkey" {
+  /** stdlib */
+  export class Redis { [key: string]: any; }
+  /** stdlib */
+  export function createClient(...args: any[]): any;
+}
+
 declare module "iroh" {
   /** stdlib */
   export function bind(...args: any[]): any;
@@ -2014,9 +2183,9 @@ declare module "module" {
 
 declare module "moment" {
   /** stdlib */
-  export default function (...args: any[]): any;
+  export default function (input?: any): any;
   /** stdlib */
-  export function moment(...args: any[]): any;
+  export function moment(input?: any): any;
 }
 
 declare module "mongodb" {
@@ -2114,6 +2283,33 @@ declare module "node-fetch" {
   export class Response { [key: string]: any; }
   /** stdlib */
   export default function (...args: any[]): any;
+}
+
+declare module "node-forge" {
+  /** stdlib */
+  export function certificateFromPem(...args: any[]): any;
+  /** stdlib */
+  export function certificateToPem(...args: any[]): any;
+  /** stdlib */
+  export function create(...args: any[]): any;
+  /** stdlib */
+  export function createCertificate(...args: any[]): any;
+  /** stdlib */
+  export function generateKeyPair(...args: any[]): any;
+  /** stdlib */
+  export function privateKeyFromPem(...args: any[]): any;
+  /** stdlib */
+  export function privateKeyToPem(...args: any[]): any;
+  /** stdlib */
+  export function publicKeyToPem(...args: any[]): any;
+}
+
+declare module "node-pty" {
+  /** stdlib */
+  const _default: any;
+  export default _default;
+  /** stdlib */
+  export function spawn(...args: any[]): any;
 }
 
 declare module "nodemailer" {
@@ -2311,13 +2507,27 @@ declare module "perf_hooks" {
   /** stdlib */
   export const constants: any;
   /** stdlib */
+  const _default: any;
+  export default _default;
+  /** stdlib */
   export const performance: any;
   /** stdlib */
   export function createHistogram(...args: any[]): any;
   /** stdlib */
+  export function eventLoopUtilization(...args: any[]): any;
+  /** stdlib */
   export function monitorEventLoopDelay(...args: any[]): any;
   /** stdlib */
   export function timerify(...args: any[]): any;
+}
+
+declare module "perry" {
+  /** stdlib */
+  export const isStandaloneExecutable: any;
+  /** stdlib */
+  export function embeddedFiles(...args: any[]): any;
+  /** stdlib */
+  export function readEmbedded(path: string): Buffer;
 }
 
 declare module "perry/ads" {
@@ -2329,6 +2539,8 @@ declare module "perry/ads" {
   export function js_ads_interstitial_load(...args: any[]): any;
   /** stdlib */
   export function js_ads_interstitial_show(...args: any[]): any;
+  /** stdlib */
+  export function js_ads_request_consent(...args: any[]): any;
   /** stdlib */
   export function js_ads_rewarded_load(...args: any[]): any;
   /** stdlib */
@@ -2486,6 +2698,15 @@ declare module "perry/container-compose" {
   export function up(...args: any[]): any;
 }
 
+declare module "perry/gc" {
+  /** stdlib */
+  export function collect(): void;
+  /** stdlib */
+  export function idleHint(): boolean;
+  /** stdlib */
+  export function minor(): number;
+}
+
 declare module "perry/i18n" {
   /** stdlib */
   export function Currency(...args: any[]): any;
@@ -2503,6 +2724,23 @@ declare module "perry/i18n" {
   export function ShortDate(...args: any[]): any;
   /** stdlib */
   export function t(...args: any[]): any;
+}
+
+declare module "perry/ios" {
+  /** stdlib */
+  export function createLanguageModelSession(...args: any[]): any;
+  /** stdlib */
+  export function destroyLanguageModelSession(...args: any[]): any;
+  /** stdlib */
+  export function foundationModelAvailability(...args: any[]): any;
+  /** stdlib */
+  export function getLayoutEnvironment(...args: any[]): any;
+  /** stdlib */
+  export function offLayoutChange(...args: any[]): any;
+  /** stdlib */
+  export function onLayoutChange(...args: any[]): any;
+  /** stdlib */
+  export function respond(...args: any[]): any;
 }
 
 declare module "perry/media" {
@@ -2536,6 +2774,41 @@ declare module "perry/media" {
   export function setVolume(...args: any[]): any;
   /** stdlib */
   export function stop(...args: any[]): any;
+}
+
+declare module "perry/native" {
+  /** stdlib */
+  export const NativeArena: any;
+  /** intrinsic */
+  export function alignof(): number;
+  /** stdlib */
+  export function f32(value: number): number;
+  /** stdlib */
+  export function f64(value: number): number;
+  /** stdlib */
+  export function i16(value: number): number;
+  /** stdlib */
+  export function i32(value: number): number;
+  /** stdlib */
+  export function i64(value: number): number;
+  /** stdlib */
+  export function i8(value: number): number;
+  /** stdlib */
+  export function isize(value: number): number;
+  /** intrinsic */
+  export function offsetof(field: string): number;
+  /** intrinsic */
+  export function sizeof(): number;
+  /** stdlib */
+  export function u16(value: number): number;
+  /** stdlib */
+  export function u32(value: number): number;
+  /** stdlib */
+  export function u64(value: number): number;
+  /** stdlib */
+  export function u8(value: number): number;
+  /** stdlib */
+  export function usize(value: number): number;
 }
 
 declare module "perry/plugin" {
@@ -2624,6 +2897,8 @@ declare module "perry/system" {
   export function getOSVersion(...args: any[]): any;
   /** stdlib */
   export function getSafeAreaInsets(...args: any[]): any;
+  /** stdlib */
+  export function hapticPlay(type: string): void;
   /** stdlib */
   export function imagePickerPick(...args: any[]): any;
   /** stdlib */
@@ -2780,6 +3055,8 @@ declare module "perry/ui" {
   /** stdlib */
   export function AttributedText(...args: any[]): any;
   /** stdlib */
+  export function BloomView(...args: any[]): any;
+  /** stdlib */
   export function BottomNavigation(...args: any[]): any;
   /** stdlib */
   export function Button(...args: any[]): any;
@@ -2844,6 +3121,8 @@ declare module "perry/ui" {
   /** stdlib */
   export function WebView(...args: any[]): any;
   /** stdlib */
+  export function WheelPicker(...args: any[]): any;
+  /** stdlib */
   export function Window(...args: any[]): any;
   /** stdlib */
   export function ZStack(...args: any[]): any;
@@ -2854,6 +3133,8 @@ declare module "perry/ui" {
   /** stdlib */
   export function alertWithButtons(...args: any[]): any;
   /** stdlib */
+  export function appSetActivationPolicy(...args: any[]): any;
+  /** stdlib */
   export function appSetMaxSize(...args: any[]): any;
   /** stdlib */
   export function appSetMinSize(...args: any[]): any;
@@ -2863,6 +3144,10 @@ declare module "perry/ui" {
   export function attributedTextAppend(...args: any[]): any;
   /** stdlib */
   export function attributedTextClear(...args: any[]): any;
+  /** stdlib */
+  export function bloomViewGetHwnd(...args: any[]): any;
+  /** stdlib */
+  export function bloomViewGetNativeHandle(...args: any[]): any;
   /** stdlib */
   export function blur(...args: any[]): any;
   /** stdlib */
@@ -3007,6 +3292,12 @@ declare module "perry/ui" {
   export function webviewLoadUrl(...args: any[]): any;
   /** stdlib */
   export function webviewReload(...args: any[]): any;
+  /** stdlib */
+  export function wheelPickerAddItem(...args: any[]): any;
+  /** stdlib */
+  export function wheelPickerGetSelected(...args: any[]): any;
+  /** stdlib */
+  export function wheelPickerSetSelected(...args: any[]): any;
 }
 
 declare module "perry/updater" {
@@ -3017,7 +3308,15 @@ declare module "perry/updater" {
   /** stdlib */
   export function computeFileSha256(...args: any[]): any;
   /** stdlib */
+  export function embeddedCheckHeaders(...args: any[]): any;
+  /** stdlib */
+  export function embeddedCheckUrl(...args: any[]): any;
+  /** stdlib */
+  export function embeddedRefreshDue(...args: any[]): any;
+  /** stdlib */
   export function getBackupPath(...args: any[]): any;
+  /** stdlib */
+  export function getEmbeddedConfig(...args: any[]): any;
   /** stdlib */
   export function getExePath(...args: any[]): any;
   /** stdlib */
@@ -3028,6 +3327,8 @@ declare module "perry/updater" {
   export function performRollback(...args: any[]): any;
   /** stdlib */
   export function readSentinel(...args: any[]): any;
+  /** stdlib */
+  export function recordEmbeddedResponse(...args: any[]): any;
   /** stdlib */
   export function relaunch(...args: any[]): any;
   /** stdlib */
@@ -3291,6 +3592,13 @@ declare module "punycode" {
   export function toUnicode(...args: any[]): any;
 }
 
+declare module "qs" {
+  /** stdlib */
+  export function parse(input: string, options: any): any;
+  /** stdlib */
+  export function stringify(value: any, options: any): string;
+}
+
 declare module "querystring" {
   /** stdlib */
   const _default: any;
@@ -3392,13 +3700,6 @@ declare module "sharp" {
   export default function (p0: string): any;
   /** stdlib */
   export function sharp(p0: string): any;
-}
-
-declare module "slugify" {
-  /** stdlib */
-  export default function (p0: string, p1: string, p2: string): string;
-  /** stdlib */
-  export function slugify(p0: string, p1: string, p2: string): string;
 }
 
 declare module "sqlite" {
@@ -3749,11 +4050,15 @@ declare module "tls" {
   /** stdlib */
   export function connect(p0: any, p1: any, p2: any, p3: any): any;
   /** stdlib */
+  export function convertALPNProtocols(protocols: any, out: any): any;
+  /** stdlib */
   export function createSecureContext(options: any): any;
   /** stdlib */
   export function createServer(options: any, secureConnectionListener: any): any;
   /** stdlib */
   export function getCACertificates(type: any): any;
+  /** stdlib */
+  export function getCertificateCompressionAlgorithms(...args: any[]): any;
   /** stdlib */
   export function getCiphers(...args: any[]): any;
   /** stdlib */
@@ -3776,6 +4081,38 @@ declare module "tty" {
 declare module "tursodb" {
   /** stdlib */
   export function open(...args: any[]): any;
+}
+
+declare module "typescript" {
+  /** stdlib */
+  export const DiagnosticCategory: any;
+  /** stdlib */
+  export const ModuleKind: any;
+  /** stdlib */
+  export const ScriptTarget: any;
+  /** stdlib */
+  export function flattenDiagnosticMessageText(...args: any[]): any;
+  /** stdlib */
+  export function transpileModule(...args: any[]): any;
+}
+
+declare module "undici" {
+  /** stdlib */
+  export class Agent { [key: string]: any; }
+  /** stdlib */
+  export class ProxyAgent { [key: string]: any; }
+  /** stdlib */
+  export function Agent(...args: any[]): any;
+  /** stdlib */
+  export function ProxyAgent(...args: any[]): any;
+  /** stdlib */
+  export function fetch(...args: any[]): any;
+  /** stdlib */
+  export function getGlobalDispatcher(...args: any[]): any;
+  /** stdlib */
+  export function request(...args: any[]): any;
+  /** stdlib */
+  export function setGlobalDispatcher(...args: any[]): any;
 }
 
 declare module "url" {
@@ -4071,7 +4408,7 @@ declare module "vm" {
   /** stdlib */
   export function compileFunction(...args: any[]): any;
   /** stdlib */
-  export function createContext(p0: any): any;
+  export function createContext(contextObject?: any, options?: any): any;
   /** stdlib */
   export function createScript(...args: any[]): any;
   /** stdlib */

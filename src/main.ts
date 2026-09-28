@@ -6,6 +6,8 @@ import { GitHubSearchEngine } from "./core/discovery/GitHubSearchEngine";
 import { GitHubAPIClient } from "./core/sync/GitHubAPIClient";
 import { ProxyManager } from "./core/proxy/ProxyManager";
 import { DownloadManager } from "./core/download/DownloadManager";
+import { ThreadPool, resolvePoolSize } from "./core/concurrent";
+import { DedupEngine, generateDedupReport, dedupCleaner } from "./core/dedup";
 
 function parseArgs(argv: string[]): { command: string; args: string[]; options: Record<string, string> } {
     const a = argv.slice(2);
@@ -182,6 +184,66 @@ function main(): void {
             break;
         }
 
+        case "dedup": {
+            console.log("\n去重扫描（并行打分）...");
+            const t0 = Date.now();
+            const report = generateDedupReport();
+            const ms = Date.now() - t0;
+            console.log("  软件包总数:    " + report.totalPackages);
+            console.log("  唯一 URL 哈希: " + report.uniqueHashes);
+            console.log("  精确重复组:    " + report.duplicateGroups + "（重复项 " + report.totalDuplicates + "）");
+            console.log("  模糊候选对:    " + report.fuzzyCandidates.length +
+                (dedupCleaner.parallelUsed ? "  [并行打分]" : "  [串行打分]"));
+            for (let i = 0; i < Math.min(10, report.fuzzyCandidates.length); i++) {
+                const f = report.fuzzyCandidates[i];
+                console.log("    " + f.score.toFixed(3) + "  " + f.pkg.name + "  ≈  " + f.match.name);
+            }
+            console.log("  耗时: " + ms + "ms");
+            break;
+        }
+
+        case "bench": {
+            const size = parseInt(args[0] || "600", 10);
+            const candCount = parseInt(args[1] || "200", 10);
+            const pool = new ThreadPool({ maxWorkers: resolvePoolSize(0), minParallelBatch: 1 });
+            console.log("\n并发基准（" + size + " 条目 × " + candCount + " 候选 = " +
+                (size * candCount) + " 次相似度计算）");
+            console.log("  并行度: " + pool.size);
+
+            const engine = new DedupEngine();
+            const names: string[] = [];
+            const cands: string[] = [];
+            for (let i = 0; i < size; i++) names.push("app-" + i + "-toolkit");
+            for (let j = 0; j < candCount; j++) cands.push("cand-" + j + "-toolkit-app");
+
+            // 串行基线
+            const t0 = Date.now();
+            let hits = 0;
+            for (let i = 0; i < names.length; i++) {
+                for (let j = 0; j < cands.length; j++) {
+                    if (engine.similarity(names[i], cands[j]) >= 0.75) hits++;
+                }
+            }
+            const serialMs = Date.now() - t0;
+
+            // 并行（同一批名称对，预先生成 pairs 以排除构造耗时）
+            const pairs: Array<{ a: string; b: string }> = [];
+            for (let i = 0; i < names.length; i++) {
+                for (let j = 0; j < cands.length; j++) pairs.push({ a: names[i], b: cands[j] });
+            }
+            const t1 = Date.now();
+            const scores = engine.scorePairsParallel(pairs, pool);
+            let phits = 0;
+            for (let i = 0; i < scores.length; i++) if (scores[i] >= 0.75) phits++;
+            const parallelMs = Date.now() - t1;
+
+            console.log("  串行: " + serialMs + "ms   命中=" + hits);
+            console.log("  并行: " + parallelMs + "ms   命中=" + phits);
+            console.log("  加速比: " + (serialMs / Math.max(parallelMs, 1)).toFixed(2) + "x   结果一致=" + (hits === phits));
+            console.log("  执行器: " + JSON.stringify(pool.getStats()));
+            break;
+        }
+
         case "help":
         default:
             console.log("\n仓鼠软库 v1.4\n");
@@ -189,6 +251,8 @@ function main(): void {
             console.log("  discover [kw]     从 GitHub 在线搜索新软件\n");
             console.log("  search <kw>       按关键词搜索（本地→GitHub）\n");
             console.log("  download <id>     下载软件（经加速器，自动直连回退）\n");
+            console.log("  dedup             去重扫描（模糊匹配并行打分）\n");
+            console.log("  bench [n] [c]     并发基准测试（默认 600 条目 × 200 候选）\n");
             console.log("  proxy             查看加速器状态（自动测速）\n");
             console.log("  info <id>         查看软件详情");
             console.log("  list              显示仓库 + 软件包");
