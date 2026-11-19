@@ -39,8 +39,9 @@ export class TaskQueue<T> {
         }
     }
 
-    shift(): T | undefined {
-        if (this.head >= this.items.length) return undefined;
+    /** 出队；空队列返回 null（与 Channel.getLast 的空值契约一致） */
+    shift(): T | null {
+        if (this.head >= this.items.length) return null;
         const value = this.items[this.head];
         this.head++;
         // 惰性压缩：已消费过半且超过阈值时回收前缀，避免内存持续增长
@@ -51,8 +52,8 @@ export class TaskQueue<T> {
         return value;
     }
 
-    peek(): T | undefined {
-        return this.head < this.items.length ? this.items[this.head] : undefined;
+    peek(): T | null {
+        return this.head < this.items.length ? this.items[this.head] : null;
     }
 
     /** 一次性取出全部待处理项并清空 */

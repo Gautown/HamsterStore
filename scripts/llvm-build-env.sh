@@ -1,34 +1,36 @@
-# LLVM-only 构建环境（不依赖 Visual Studio / MSVC）
-# 用法： source scripts/llvm-build-env.sh  然后执行 perry compile / npm run build:*
+#!/usr/bin/env bash
+# Perry 0.5.1520 Windows 构建环境 — LLVM + xwin sysroot，不依赖 MSVC / Visual Studio
+# 用法： source scripts/llvm-build-env.sh   然后执行 perry compile / npm run build:*
 #
-# 为什么需要这些变量（0.5.1520 实测）：
-#   1. Perry 的正则运行时入口（js_regexp_new / js_string_match / js_string_replace_regex）
-#      不在 npm 预编译库里，必须用 PERRY_WORKSPACE_ROOT 指向 perry 源码树重建 runtime。
-#   2. 重建 runtime 时 perry 需要 cargo 链接宿主工具链，但它把链接器指向
-#      ~/AppData/Local/perry/link-shim/link.exe —— 该文件必须由用户放置（用 lld-link 代替 MSVC）。
-#   3. cargo 链接时需要 Windows SDK 系统库路径（LIB），cc-rs 编译 C 依赖时需要
-#      头文件路径（INCLUDE）与 C 编译器（CC/CXX → clang-cl），归档器 AR → llvm-lib。
+# 工具链布局（完整安装步骤见 docs/BUILD.md）：
+#   $LOCALAPPDATA/perry/llvm-mingw-<ver>/bin   clang / lld-link / llvm-lib（llvm-mingw ucrt x86_64）
+#   $LOCALAPPDATA/perry/windows-sdk            CRT + Windows SDK（perry setup windows，经 xwin 0.10）
+#   $LOCALAPPDATA/perry/libs-flat              perry_runtime.lib + perry_stdlib.lib（npm 包 .zst 解压展平）
+#
+# 关键实测点（0.5.1520，2026-11-19 本机验证）：
+#   1. PERRY_RS4GC=0 — 含 try/catch 的模块在 Windows lowered 成 WinEH funclet，
+#      RS4GC statepoint pass 直接 access violation（上游 #7354），必须关闭。
+#   2. PERRY_RUNTIME_DIR / PERRY_LIB_DIR 必须显式指定 — perry 自动解压的缓存目录
+#      （libs/<hash>/）不在链接器搜索路径里，二次编译会报 "Could not find perry_runtime.lib"。
+#   3. lld-link.exe / clang-cl.exe 由 ld.lld.exe / clang.exe 复制改名而来
+#      （lld/clang 按 argv[0] 分发 flavor，llvm-mingw 包只带 ld.lld 名字）。
+#   4. xwin.exe 需放在编译工作目录（perry 按 cwd 查找）；xwin 缓存目录与输出目录
+#      必须同盘，否则 splat 阶段 rename 跨盘失败（os error 17）。
+#   5. GitHub 直连下载慢时用镜像前缀：https://gh-proxy.org/<原始URL>（实测 347KB/s vs 43KB/s）。
+#
+# 历史方案（已废弃）：旧版本此脚本用 PERRY_WORKSPACE_ROOT 指向 perry 源码树重建
+# runtime（补正则入口 js_regexp_new 等）。0.5.1520 的 npm 包自带完整 runtime/stdlib
+# （.zst 压缩，首次链接自动解压），无需源码树；正则限制见 DedupEngine.tokenize 注释。
 
-PERRY_SRC="${PERRY_SRC:-F:/GoghStudio/GitHub/perry-source}"
-WS_BASE="${WS_BASE:-$HOME/AppData/Local/perry}"
-WS="$(cygpath -w "$WS_BASE/windows-sdk" 2>/dev/null || echo "$WS_BASE/windows-sdk")"
-LV="C:\\Program Files\\LLVM\\bin"
+PERRY_TOOLS="${PERRY_TOOLS:-${LOCALAPPDATA//\\//}/perry}"
+LLVM_BIN="${LLVM_BIN:-$PERRY_TOOLS/llvm-mingw-20261117-ucrt-x86_64/bin}"
 
-# 让 perry 从源码树重建 runtime/stdlib（否则回退到缺正则入口的预编译库）
-export PERRY_WORKSPACE_ROOT="$PERRY_SRC"
+export PATH="$LLVM_BIN:$PERRY_TOOLS/llvm-22.1.8/bin:$PATH"
+export PERRY_LLVM_CLANG="$LLVM_BIN/clang.exe"
+export PERRY_LLD_LINK="$LLVM_BIN/lld-link.exe"
+export PERRY_RUNTIME_DIR="$PERRY_TOOLS/libs-flat"
+export PERRY_LIB_DIR="$PERRY_TOOLS/libs-flat"
+export PERRY_RS4GC=0
 
-# 系统库搜索路径：um（kernel32/ws2_32/dbghelp…）+ ucrt + crt
-export LIB="$WS\\sdk\\lib\\um\\x86_64;$WS\\sdk\\lib\\ucrt\\x86_64;$WS\\crt\\lib\\x86_64"
-
-# C/C++ 头文件搜索路径（cc-rs 编译 libmimalloc-sys 等 C 依赖用）
-export INCLUDE="$WS\\crt\\include;$WS\\sdk\\include\\ucrt;$WS\\sdk\\include\\shared;$WS\\sdk\\include\\um;$WS\\sdk\\include\\winrt"
-
-# 用 LLVM 的 clang-cl 冒充 cl.exe，llvm-lib 冒充 lib.exe（杜绝 MSVC）
-export CC="$LV\\clang-cl.exe"
-export CXX="$LV\\clang-cl.exe"
-export AR="$LV\\llvm-lib.exe"
-export CC_x86_64_pc_windows_msvc="$LV\\clang-cl.exe"
-export CXX_x86_64_pc_windows_msvc="$LV\\clang-cl.exe"
-
-echo "[llvm-build-env] PERRY_WORKSPACE_ROOT=$PERRY_WORKSPACE_ROOT"
-echo "[llvm-build-env] CC=clang-cl  AR=llvm-lib  LIB/INCLUDE=xwin sysroot"
+echo "[perry-env] LLVM_BIN=$LLVM_BIN"
+echo "[perry-env] PERRY_RS4GC=0  PERRY_RUNTIME_DIR=$PERRY_RUNTIME_DIR"

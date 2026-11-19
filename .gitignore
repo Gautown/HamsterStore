@@ -19,3 +19,7 @@ config/
 *.pdb
 *.ilk
 !HamsterStore-GUI.pdb
+# 构建工具放在仓库根目录（perry 按 cwd 查找 xwin/mt；见 docs/BUILD.md）
+/xwin.exe
+/mt.exe
+/.xwin-cache/

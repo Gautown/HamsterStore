@@ -6,11 +6,12 @@
   "scripts": {
     "check": "perry check",
     "types": "perry types",
-    "build:cli": "perry compile src/main.ts -o dist/HamsterStore.exe --emit-attest",
-    "build:gui": "perry compile src/gui/main.ts -o dist/HamsterStore-GUI.exe --target windows --min-windows-version 10 --debug-symbols --emit-attest",
-    "build:all": "npm run build:cli && npm run build:gui",
+    "build:cli": "bash scripts/build.sh cli",
+    "build:gui": "bash scripts/build.sh gui",
+    "build:all": "bash scripts/build.sh all",
     "dev:windows": "perry dev --target windows",
-    "test": "echo 'Run tests manually: compile test/*.ts with perry'",
+    "test": "bash scripts/test-concurrent.sh",
+    "test:concurrent": "bash scripts/test-concurrent.sh",
     "clean": "rm -rf dist"
   },
   "keywords": [
