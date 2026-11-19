@@ -87,10 +87,12 @@ export const PackageRepository = {
         const existing = this.getByUrlHash(url_hash);
         if (existing) {
             // Update existing
+            // 注意：FileDB 的 id 存为字符串，existing.id 是 string —— 必须 Number() 归一，
+            // 否则 Number(r.id) === existing.id 恒 false，更新静默失效（真实 e2e 抓出）
             const db = getDatabase();
             const table = (db as any).tables?.packages;
             if (table) {
-                const row = table.rows.find((r: any) => Number(r.id) === existing.id);
+                const row = table.rows.find((r: any) => Number(r.id) === Number(existing.id));
                 if (row) {
                     row.version = version;
                     row.extra_json = JSON.stringify({
@@ -103,7 +105,7 @@ export const PackageRepository = {
                     (db as any)._save("packages");
                 }
             }
-            return this.getById(existing.id)!;
+            return this.getById(Number(existing.id))!;
         }
         return this.create({
             source_id, name, version, description, project_url, url_hash,
@@ -117,20 +119,23 @@ export const PackageRepository = {
 };
 
 // 从 extra_json 还原完整 Package 对象
+// id 归一为 number：FileDB 内部存字符串，但 Package.id 类型声明是 number。
+// 不归一的话 getById(pkg.id) 这类「拿返回对象的 id 再查询」会因 1 === "1" 恒 false 静默失效。
 function hydratePackage(row: any): any {
     if (!row) return row;
+    const base = Object.assign({}, row, { id: Number(row.id) });
     // 如果已经有 project_url 字段（非 extra_json），直接返回
-    if (row.project_url !== undefined && row.download_url !== undefined) return row;
+    if (base.project_url !== undefined && base.download_url !== undefined) return base;
     // 展开 extra_json
     try {
-        const ext = typeof row.extra_json === "string" ? JSON.parse(row.extra_json) : (row.extra_json || {});
-        return Object.assign({}, row, {
-            project_url: ext.project_url || row.project_url || "",
-            download_url: ext.download_url || row.download_url || "",
-            data_source: ext.data_source || row.data_source || "",
-            platform_assets: ext.platform_assets || row.platform_assets || "[]",
+        const ext = typeof base.extra_json === "string" ? JSON.parse(base.extra_json) : (base.extra_json || {});
+        return Object.assign(base, {
+            project_url: ext.project_url || base.project_url || "",
+            download_url: ext.download_url || base.download_url || "",
+            data_source: ext.data_source || base.data_source || "",
+            platform_assets: ext.platform_assets || base.platform_assets || "[]",
         });
     } catch {
-        return row;
+        return base;
     }
 }

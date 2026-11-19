@@ -23,7 +23,7 @@ src/
     discovery/          # GitHubSearchEngine (公开搜索，netFetch 回调式)
     categorization/     # CategoryEngine (17 类)
     dedup/              # DedupEngine + DedupCleaner
-    download/           # DownloadManager (netDownload + 代理回退)
+    download/           # DownloadManager (netDownload + 代理回退) + ReleaseResolver (release 资产解析/评分/缓存)
     proxy/              # ProxyManager + HamsterProxy + 代理节点
     net/                # netFetch (GET/HEAD/下载原语)
     concurrent/         # 并发基础设施（深拷贝分片并行，见模块头注释）
@@ -34,7 +34,8 @@ src/
     repositories/       # 6 Repository CRUD
   tests/
     concurrent.test.ts  # 并发基础设施 59 断言
-    filedb.test.ts      # FileDB SQL 子集 + 原子写盘 22 断言
+    filedb.test.ts      # FileDB SQL 子集 + 原子写盘 + Repository 写回 26 断言
+    release.test.ts     # Windows 资产评分选择 19 断言
     net.test.ts         # 网络完整性契约 10 断言（需外网）
   types/                # 共享类型
 ```
@@ -45,8 +46,9 @@ src/
 hamsterstore sync                # 同步内置数据 (132 包) + 种子仓库 (15) 到本地库
 hamsterstore discover [kw]       # GitHub 在线搜索发现
 hamsterstore search <关键词>      # 本地搜索 -> GitHub 在线搜索
-hamsterstore download <id>       # 下载（经加速器，失败自动直连重试）
+hamsterstore download <id>       # 解析最新 release 的 Windows 资产并下载（评分选择+缓存，经加速器，失败直连回退）
 hamsterstore bench [n] [p]       # 去重打分基准：串行 vs 并行
+hamsterstore proxy               # 查看加速器状态（自动测速）
 hamsterstore info <ID>           # 查看软件详情
 hamsterstore list                # 显示仓库 + 软件包列表
 hamsterstore categories          # 分类统计
@@ -61,7 +63,7 @@ hamsterstore help                # 帮助
 ```bash
 npm install                    # 安装依赖 (perry 0.5.1520，lockfile 锁定)
 npm run check                  # perry check 类型检查（无需工具链）
-npm run test                   # 离线回归：并发 59 断言 + FileDB 22 断言（真实二进制）
+npm run test                   # 离线回归：并发 59 + FileDB 26 + 资产选择 19 断言（真实二进制）
 npm run test:net               # 网络回归：下载完整性/404 拒绝（需外网，10 断言）
 npm run build:cli              # dist/HamsterStore.exe (~13 MB) + attest
 npm run build:gui              # dist/HamsterStore-GUI.exe + .pdb + attest
@@ -93,8 +95,9 @@ seedRepos (15 源) ────┘                                              
                                                                       v
 GitHub Search ─> GitHubSearchEngine ─> (search/discover 命令)    CLI list/info
                                                                       │
-下载: DownloadManager ─> ProxyManager.accelerateDownload ─> netDownload (curl)
-      代理失败 ─> markFailed + 直连重试一次
+下载: download <id> ─> ReleaseResolver（缓存快路径 / getLatestRelease + pickWindowsAsset 评分）
+      ─> DownloadManager ─> ProxyManager.accelerateDownload ─> netDownload (curl -f + 长度校验)
+      代理失败 ─> markFailed + 直连重试一次；解析结果写回包缓存（version/download_url）
 ```
 
 注：README 旧版描述的「种子仓库 README 爬取 → 7 解析器」管线已废弃移除，

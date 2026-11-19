@@ -95,8 +95,6 @@ export interface DownloadTask {
     created_at: string;
 }
 
-export type DownloadStatus = 'waiting' | 'downloading' | 'done' | 'failed';
-
 // 按平台分组的 Assets
 export interface PlatformAssets {
     windows: Asset[];

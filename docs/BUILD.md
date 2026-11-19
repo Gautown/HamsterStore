@@ -111,7 +111,7 @@ perry 首次链接会自动解压 npm 包的 runtime/stdlib 到 `libs/<hash>/`�
 
 ```bash
 npm run check          # 类型检查（无需工具链）
-npm run test           # 离线回归：并发 59 断言 + FileDB 22 断言（真实二进制）
+npm run test           # 离线回归：并发 59 + FileDB 26 + 资产选择 19 断言（真实二进制）
 npm run test:net       # 网络回归：下载完整性契约（需外网，走 gh-proxy 镜像）
 npm run build:cli      # dist/HamsterStore.exe + attest
 npm run build:gui      # dist/HamsterStore-GUI.exe + .pdb + attest

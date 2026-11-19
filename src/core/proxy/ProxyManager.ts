@@ -119,6 +119,16 @@ export class ProxyManager {
             !originalUrl.includes("githubassets.com")) {
             return originalUrl;
         }
+        // API 请求只能走 api:true 的 prefix 节点（2026-11-19 实测：ghfast.top/ghproxy.net
+        // 对 api.github.com 返回 "Invalid input."；此前按测速最快路由导致 release 解析必挂）。
+        // 无已测速节点时按 priority 取未测速的 api 节点（直连 api.github.com 在国内基本不通）。
+        if (originalUrl.includes("api.github.com")) {
+            const apiNodes = this.nodes.filter(n =>
+                n.enabled && n.api && n.mode === "prefix" && n.failures < MAX_FAILURES);
+            const measured = apiNodes.filter(n => n.latency > 0).sort((a, b) => a.latency - b.latency);
+            const apiNode = measured[0] || apiNodes.sort((a, b) => a.priority - b.priority)[0];
+            return apiNode ? `${apiNode.url}/${originalUrl}` : originalUrl;
+        }
         const node = this.getBestNode();
         if (!node) return originalUrl;
 

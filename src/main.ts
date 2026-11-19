@@ -3,9 +3,9 @@ import { initDatabase, SourceRepository, PackageRepository, DownloadRepository }
 import { initSeedSources } from "./core/sync/seedRepos";
 import { SourceSyncer } from "./core/sync/SourceSyncer";
 import { GitHubSearchEngine } from "./core/discovery/GitHubSearchEngine";
-import { GitHubAPIClient } from "./core/sync/GitHubAPIClient";
 import { ProxyManager } from "./core/proxy/ProxyManager";
 import { DownloadManager } from "./core/download/DownloadManager";
+import { resolveReleaseDownload } from "./core/download/ReleaseResolver";
 import { ThreadPool, resolvePoolSize } from "./core/concurrent";
 import { DedupEngine, generateDedupReport, dedupCleaner } from "./core/dedup";
 
@@ -153,34 +153,25 @@ function main(): void {
 
         case "download": {
             const id = parseInt(args[0] || "0", 10);
-            if (!id) { console.log("用法: download <软件ID>  (从 info 查看 download_url)"); break; }
+            if (!id) { console.log("用法: download <软件ID>"); break; }
             const p = PackageRepository.getById(id);
             if (!p) { console.log("未找到 ID=" + id); break; }
-            let url = "";
-            try { url = JSON.parse(p.extra_json || "{}").download_url || ""; } catch {}
-            // 项目页 URL（无资产路径）→ 需要走 release API 拿真实资产
-            const isProjectPage = !url || /^https:\/\/github\.com\/[^\/]+\/[^\/]+\/?$/.test(url);
-            if (isProjectPage) {
-                // 回退：直接用 project_url 拼最新 release（调 API 拿真实资产）
-                console.log("该包无预置 download_url，尝试获取最新 release...");
-                const ownerRepo = parseOwnerRepo(p.name);
-                if (!ownerRepo) { console.log("无法解析 owner/repo，中止"); break; }
-                const client = new GitHubAPIClient(token);
-                client.getLatestRelease(ownerRepo.owner, ownerRepo.repo, (rel) => {
-                    if (!rel || !rel.assets || rel.assets.length === 0) {
-                        console.log("未找到 release 资产，中止");
-                        process.exit(1);
-                    }
-                    // 选 Windows 资产（严格优先 x86_64-pc-windows-msvc/GNU，排除 mac/linux）
-                    const winAsset = rel.assets.find((a: any) => /x86_64-pc-windows|windows.*x86_64|x86_64.*windows/i.test(a.name)) ||
-                        rel.assets.find((a: any) => /\.exe$|\.msi$|\.zip$/i.test(a.name) && !/darwin|linux|aarch64|arm/i.test(a.name)) ||
-                        rel.assets[0];
-                    console.log("Release: " + rel.tag_name + " → " + winAsset.name);
-                    startCliDownload(p.id, winAsset.browser_download_url, winAsset.name);
-                });
-                break;
-            }
-            startCliDownload(p.id, url, (url.split("/").pop() || "download"), token);
+            // 统一走 ReleaseResolver：缓存快路径 / release API 解析 + 评分选 Windows 资产
+            // （旧内联正则可能选中 .zip.sha256 校验文件，兜底 assets[0] 可能是 Linux 资产）
+            ProxyManager.getInstance().init();
+            console.log("\n解析下载目标: " + p.name + " (ID: " + id + ")");
+            resolveReleaseDownload(p, token, (resolved) => {
+                if (!resolved) {
+                    console.log("未找到可下载的 Windows release 资产（无 release 或仅源码/其他平台资产）");
+                    console.log("项目页: " + (p.project_url || p.download_url || p.name));
+                    process.exit(1);
+                    return;
+                }
+                const ver = resolved.version ? " " + resolved.version : "";
+                const sizeMB = resolved.size > 0 ? " (" + (resolved.size / 1048576).toFixed(1) + "MB)" : "";
+                console.log("资产: " + resolved.assetName + ver + sizeMB + (resolved.fromCache ? " [缓存]" : ""));
+                startCliDownload(p.id, resolved.url, resolved.assetName);
+            });
             break;
         }
 
@@ -260,12 +251,6 @@ function main(): void {
             console.log("  help              帮助\n");
             console.log("选项: --token <PAT>\n");
     }
-}
-
-function parseOwnerRepo(name: string): { owner: string; repo: string } | null {
-    const m = name.match(/^([^\/]+)\/([^\/]+)$/);
-    if (m) return { owner: m[1], repo: m[2] };
-    return null;
 }
 
 function startCliDownload(packageId: number, url: string, name: string): void {

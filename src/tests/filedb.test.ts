@@ -3,6 +3,7 @@
 // 覆盖: INSERT 自增 id / WHERE 参数时序(v2 修复) / AND 多条件 / LIKE /
 //       UPDATE / DELETE / ORDER+LIMIT / 跨实例持久化 / .tmp 无残留
 import { FileDB } from "../data/FileDB";
+import { initDatabase, PackageRepository } from "../data";
 import { join } from "node:path";
 import { readdirSync, readFileSync, unlinkSync, rmdirSync } from "node:fs";
 
@@ -89,6 +90,30 @@ for (const f of files) {
 }
 check("无 .tmp 残留", tmpLeft, 0);
 check("全部表 JSON 可解析", badJson, 0);
+
+// ── Repository 写回（saveFromRelease 字符串 id 比较 bug 回归，真实 e2e 抓出）──
+console.log("\n[Repository 写回]");
+const repoBase = join(process.env.TEMP || process.env.TMP || ".", "hs_repo_test_" + Date.now());
+initDatabase(join(repoBase, "store.db"));
+const created = PackageRepository.create({
+    source_id: 0, name: "o/r", version: "", description: "",
+    categories: "[]", platform_assets: "[]",
+    project_url: "https://github.com/o/r", url_hash: "testhash123",
+    download_url: "https://github.com/o/r", data_source: "seed",
+});
+check("create 返回数值 id", typeof created.id, "number");
+const assetUrl = "https://github.com/o/r/releases/download/v9.9/app-x64.zip";
+PackageRepository.saveFromRelease("o/r", "", "https://github.com/o/r", "testhash123", "v9.9", "[]", assetUrl, 0, "api");
+const after = PackageRepository.getById(created.id);
+check("saveFromRelease 版本写回", after ? after.version : null, "v9.9");
+check("saveFromRelease 资产 URL 写回", after ? after.download_url : null, assetUrl);
+check("saveFromRelease 不产生重复行", PackageRepository.count(), 1);
+try {
+    const rdir = join(repoBase, "filedb");
+    for (const f of readdirSync(rdir)) unlinkSync(join(rdir, f));
+    rmdirSync(rdir);
+    rmdirSync(repoBase);
+} catch {}
 
 // 清理隔离目录
 try {
