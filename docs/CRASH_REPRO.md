@@ -7,12 +7,12 @@
 
 为避免重蹈覆辙,本项目从 2026-08-28 起强制以下构建约束。
 
-## 构建约束 (已写入 package.json)
+## 构建约束 (已写入 package.json / scripts/build.sh)
 
 ```bash
-npm run build:cli   # perry compile src/main.ts -o dist/HamsterStore.exe --emit-attest
-npm run build:gui   # perry compile src/gui/main.ts -o dist/HamsterStore-GUI.exe \
-                    #   --target windows --min-windows-version 10 \
+npm run build:cli   # bash scripts/build.sh cli（源码重建环境，见 docs/BUILD.md）
+npm run build:gui   # bash scripts/build.sh gui
+                    #   --target windows --min-windows-version 10
                     #   --debug-symbols --emit-attest
 ```
 
@@ -50,10 +50,38 @@ HamsterStore-GUI.exe.attest.json
 
 ## 已知待解事项
 
-- 08-10 崩溃根因仍未确认:源码审计未发现无限递归
-  (`buildMainBody` / `rebuildBody` / `navigateToDetail` 均在按钮点击回调内,
-  不在 widget 构造期)。主导怀疑是 `perry/ui` 运行时对深层嵌套
-  HStack/VStack 树的布局递归。需带符号的 `.pdb` 构建方可验证。
+- 08-10 崩溃根因仍未确认,但 **2026-11-19 复现调查:启动期崩溃在当前工具链下未复现**
+  (见下节)。交互期(点击导航触发 rebuildBody)尚未验证。
 - `commit_sha` 当前为空:因构建副本 `PerryTS/HamsterStore` 不是 git 仓库。
   建议将其设为真正的 git 工作树,或在 CI 中于 git 仓库内构建,
   以便 attest 自动写入 commit。
+
+## 2026-11-19 复现调查（Perry 0.5.1520 + PERRY_RS4GC=0）
+
+工作台：`src/gui/_repro.ts`（等价 bc80286 的 v2 完整接线：initDatabase +
+buildMainBody + App），配套恢复 `src/ui/`（22 文件，修复 7 处相对路径）与
+`src/core/{install,process,update}`（UI 组件依赖，此前随孤儿清理移除）。
+
+```bash
+source scripts/perry-source-env.sh
+npx perry compile src/gui/_repro.ts -o dist/HamsterStore-UIRepro.exe \
+  --target windows --min-windows-version 10 --debug-symbols --emit-attest
+./dist/HamsterStore-UIRepro.exe
+```
+
+结果（真实运行 + 桌面截图取证）：
+
+1. **编译通过**：完整 Bento UI 在 0.5.1520 无 API 漂移，15.1MB + .pdb。
+2. **启动崩溃未复现**：首页完整构建（145 包/15 源/3 下载记录），App() 进入
+   消息循环后稳定运行 90s+，无 0xC00000FD。08-10 的启动期栈溢出疑似
+   0.5.1220 时代运行时问题，或需特定交互触发。
+3. **渲染正常**：9 页导航、统计卡、精选/分类面板、代理状态栏均显示真实数据。
+4. **交互性未验证**：perry/ui 自绘控件不暴露 UIA 元素（AX 树仅原生标题栏 +
+   搜索 Edit），自动化点击（背景/前台多组坐标）未观察到页面切换；窗口后被
+   最小化，恢复需用户授权未完成。**需人工点击导航确认 rebuildBody 路径**，
+   这是复活 UI 前的最后一道验证。
+
+结论：UI 复活的技术阻塞（不可复现的崩溃）已大幅降低——启动路径干净。
+待人工交互验证通过后，把 `_repro.ts` 的接线替换 `gui/main.ts` 即可复活；
+注意 DownloadManager v5 的 getState/getQueued/clearCompleted 是 stub，
+下载管理页需先补齐这些 API 才有真实状态。

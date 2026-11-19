@@ -77,14 +77,14 @@ npm run build:all              # 双编译
 
 ## GUI 现状（诚实说明）
 
-当前 GUI 入口 (`src/gui/main.ts`) 是**最小化窗口**：显示标题 + 已加载软件包数。
-这是 2026-08-10 `EXCEPTION_STACK_OVERFLOW` 崩溃（根因未确认，见
-[docs/CRASH_REPRO.md](docs/CRASH_REPRO.md)）后的降级形态。
+生产 GUI 入口 (`src/gui/main.ts`) 仍是**最小化窗口**（标题 + 软件包数）。
 
-原 8 页面 Bento UI（首页/软件库/精选/分类/下载/已安装/更新/设置，16 组件 ~2300 行）
-在 2026-11-19 孤儿代码清理中移除——它当时已不被任何入口引用。需要恢复时从
-git 历史取回 `src/ui/`（清理提交之前），并先带 .pdb 复现崩溃再重新接线。
-现在 `build:gui` 强制 `--debug-symbols`，.pdb 必产出。
+**2026-11-19 复现调查**（详见 [docs/CRASH_REPRO.md](docs/CRASH_REPRO.md)）：
+完整 Bento UI 已恢复为工作台（`src/gui/_repro.ts` + `src/ui/` 22 文件 +
+install/process/update 依赖），在 Perry 0.5.1520 下编译通过、渲染真实数据、
+**启动期 08-10 栈溢出未复现**（90s+ 稳定）。交互导航待人工点击验证——
+通过后把 _repro 接线替换 gui/main.ts 即可复活 8 页面 UI。
+注意：DownloadManager v5 的 getState/getQueued 是 stub，下载管理页需先补齐。
 
 ## 数据流向
 
