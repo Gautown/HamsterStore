@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-- **Perry v0.5.1520** — TypeScript to native compiler (LLVM + Clang + LLD，无 MSVC 依赖，搭建见 [docs/BUILD.md](docs/BUILD.md))
+- **Perry v0.5.1665** — TypeScript to native compiler (LLVM + Clang + LLD，无 MSVC 依赖，搭建见 [docs/BUILD.md](docs/BUILD.md))
 - **FileDB** — 纯 TS JSON 持久化 (~/.hamsterstore/filedb/*.json)，手写 SQL 子集解析，绕过 better-sqlite3 stub
 - **netFetch** — 统一网络原语：spawn curl (数组参数) + 输出文件大小轮询，回调式，零 Promise/子进程事件依赖
 - **CategoryEngine** — 17 类标准分类 + 关键词推断
@@ -61,7 +61,7 @@ hamsterstore help                # 帮助
 ## 构建与测试
 
 ```bash
-npm install                    # 安装依赖 (perry 0.5.1520，lockfile 锁定)
+npm install                    # 安装依赖 (perry 0.5.1665，lockfile 锁定)
 npm run check                  # perry check 类型检查（无需工具链）
 npm run test                   # 离线回归：并发 59 + FileDB 26 + 资产选择 19 断言（真实二进制）
 npm run test:net               # 网络回归：下载完整性/404 拒绝（需外网，10 断言）
@@ -70,10 +70,12 @@ npm run build:gui              # dist/HamsterStore-GUI.exe + .pdb + attest
 npm run build:all              # 双编译
 ```
 
-**首次构建前必须搭建工具链**（LLVM + xwin Windows SDK + Rust + perry 源码树，
-全部用户级安装，无需管理员权限）：完整步骤与坑位见 [docs/BUILD.md](docs/BUILD.md)。
-要点：npm 预编译 stdlib 缺正则运行时入口，CLI/GUI 构建走 `PERRY_WORKSPACE_ROOT`
-源码重建；含 try/catch 的模块需 `PERRY_RS4GC=0`（上游 #7354）。脚本已封装这些变量。
+**首次构建前必须搭建工具链**（LLVM + xwin Windows SDK + 手动解压 1665 捆绑库，
+全部用户级安装，无需管理员权限，无需 Rust/源码树）：完整步骤见
+[docs/BUILD.md](docs/BUILD.md)。要点：1665 不自动解压 npm 捆绑 .zst 库，需手动
+解压到 libs-1665 并设 `PERRY_RUNTIME_DIR`/`PERRY_LIB_DIR`（脚本已封装）；
+上游 #14982（class 方法 $pshape COFF alias）未修复，网络/代理/更新模块已重构为
+对象字面量工厂适配，**新增代码避免用 class 封装带 GC roots 的方法**。
 
 ## GUI 现状（诚实说明）
 
@@ -108,8 +110,9 @@ GitHub Search ─> GitHubSearchEngine ─> (search/discover 命令)    CLI list/
 - **`prepare().run(...params)` 截断**：最多 7 个参数, 超出丢弃. 解决:`extra_json` 字段聚合
 - **预编译 better-sqlite3 stub**：`prepare()` 返回 undefined. 解决: FileDB 纯 TS JSON 替代
 - **`setTimeout` 回调非 UI 线程 SIGSEGV**：解决: 自旋 sleep 同步等待（CLI 保活用 setInterval）
-- **npm stdlib 缺正则入口**：`js_regexp_new` 等 5 符号链接缺失. 解决: 源码重建 runtime+stdlib（docs/BUILD.md）；热路径改字符遍历（DedupEngine.tokenize）
-- **try/catch + RS4GC**：WinEH funclet 与 statepoint pass 不兼容 (#7354). 解决: `PERRY_RS4GC=0`
+- **npm stdlib 缺正则入口（1520）**：`js_regexp_new` 等 5 符号链接缺失. 解决: 升级 0.5.1665（已含）；1520 回退方案见 docs/BUILD.md 附录 A
+- **try/catch + RS4GC（1520）**：WinEH funclet 与 statepoint pass 不兼容 (#7354). 0.5.1665 已修复，默认 statepoint GC
+- **class 方法 $pshape COFF alias（1665，#14982 未修复）**：compact-map rewriter 拒绝整模块. 解决: 对象字面量工厂（GitHubAPIClient/GitHubSearchEngine/ProxyManager/SelfUpdater 已重构）
 - **子进程事件回调不可靠**：stdout/close 回调在真实二进制不触发. 解决: netFetch 文件轮询
 - **emoji 在字符串中**：替换为 ASCII 标识
 - **subsystem=windows 无 cmd 指令窗口**

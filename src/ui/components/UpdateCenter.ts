@@ -8,7 +8,7 @@ import {
     textSetFontSize, textSetColor,
 } from "perry/ui";
 import { PackageRepository, InstallationRepository } from "../../data";
-import { SelfUpdater } from "../../core/update/SelfUpdater";
+import { createSelfUpdater } from "../../core/update/SelfUpdater";
 import { InstallManager } from "../../core/install/InstallManager";
 import { COLORS, RADIUS, SPACING, FONT } from "../styles/theme";
 
@@ -78,11 +78,12 @@ export function UpdateCenter(): Widget {
     const checkBtn = Button("检查更新", () => {
         try {
             const exePath = process.argv[0] || process.execPath || "";
-            const updater = new SelfUpdater(exePath, "1.0.0");
-            const info = updater.checkUpdate();
-            if (info && info.hasUpdate) {
-                console.log("[Update] New version: " + info.latestVersion);
-            }
+            const updater = createSelfUpdater(exePath, "1.0.0");
+            updater.checkUpdate((info) => {
+                if (info && info.hasUpdate) {
+                    console.log("[Update] New version: " + info.latestVersion);
+                }
+            });
         } catch {}
     });
     sections.push(checkBtn);

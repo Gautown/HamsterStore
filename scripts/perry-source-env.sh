@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# [LEGACY — 仅回退 Perry 0.5.1520 时需要] 源码重建环境
+# 0.5.1665 起 npm stdlib 已含正则入口，日常构建用 llvm-build-env.sh 即可。
+# 本脚本保留 1520 时代的 PERRY_WORKSPACE_ROOT 源码重建路径（补正则运行时入口）。
 # Perry 0.5.1520 源码重建环境 — 在 llvm-build-env.sh 基础上启用 PERRY_WORKSPACE_ROOT
 # 用途：npm 预编译 stdlib 缺正则运行时入口（js_regexp_new / js_regexp_test /
 #       js_string_match / js_string_match_value / js_string_replace_regex），

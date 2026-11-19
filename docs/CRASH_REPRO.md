@@ -85,3 +85,7 @@ npx perry compile src/gui/_repro.ts -o dist/HamsterStore-UIRepro.exe \
 待人工交互验证通过后，把 `_repro.ts` 的接线替换 `gui/main.ts` 即可复活；
 注意 DownloadManager v5 的 getState/getQueued/clearCompleted 是 stub，
 下载管理页需先补齐这些 API 才有真实状态。
+
+**2026-11-19 晚些时候：项目升级 Perry 0.5.1665**（#14982 适配：4 个 class 重构为
+对象字面量工厂）。_repro 完整 Bento UI 在 1665 默认 statepoint GC 下编译通过，
+attest 的 commit_sha 现在自动写入（git 工作树内构建）。114 断言 + e2e 下载全绿。

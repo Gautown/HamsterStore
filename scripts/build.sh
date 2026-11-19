@@ -3,7 +3,7 @@
 # 用法：npm run build:cli / build:gui / build:all  或  bash scripts/build.sh cli|gui|all
 set -e
 cd "$(dirname "$0")/.."
-source scripts/perry-source-env.sh
+source scripts/llvm-build-env.sh
 mkdir -p dist
 case "${1:-all}" in
   cli)

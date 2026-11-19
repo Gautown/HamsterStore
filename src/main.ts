@@ -2,7 +2,7 @@
 import { initDatabase, SourceRepository, PackageRepository, DownloadRepository } from "./data";
 import { initSeedSources } from "./core/sync/seedRepos";
 import { SourceSyncer } from "./core/sync/SourceSyncer";
-import { GitHubSearchEngine } from "./core/discovery/GitHubSearchEngine";
+import { createGitHubSearchEngine } from "./core/discovery/GitHubSearchEngine";
 import { ProxyManager } from "./core/proxy/ProxyManager";
 import { DownloadManager } from "./core/download/DownloadManager";
 import { resolveReleaseDownload } from "./core/download/ReleaseResolver";
@@ -43,7 +43,7 @@ function main(): void {
         case "discover":
         case "search-online": {
             console.log("搜索 GitHub 公开仓库...\n");
-            const engine = new GitHubSearchEngine(token);
+            const engine = createGitHubSearchEngine(token);
             const kw = args[0] || "awesome windows";
             engine.searchByKeyword(kw, 10, (results) => {
                 console.log("GitHub 找到 " + results.length + " 个结果:");
@@ -92,7 +92,7 @@ function main(): void {
             const matched = PackageRepository.search(keyword, 20);
             if (matched.length === 0) {
                 console.log("  本地无匹配 — 尝试从 GitHub 在线搜索...");
-                const engine = new GitHubSearchEngine(token);
+                const engine = createGitHubSearchEngine(token);
                 engine.searchByKeyword(keyword, 10, (results) => {
                     console.log("  GitHub 找到 " + results.length + " 个结果:");
                     for (const r of results) {

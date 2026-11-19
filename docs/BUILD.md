@@ -1,144 +1,132 @@
-# Windows 构建环境搭建指南（Perry 0.5.1520，无 MSVC / Visual Studio）
+# Windows 构建环境搭建指南（Perry 0.5.1665，无 MSVC / Visual Studio）
 
-> 2026-11-19 在本机完整验证：`npm run test`（59/59 通过）、`npm run build:cli`、
-> `npm run build:gui`（含 .pdb）全部成功。本文记录每一步与每个坑。
+> 2026-11-19 本机完整验证：`npm run check`（75 文件）、`npm test`（104 断言）、
+> `npm run test:net`（10 断言）、`npm run build:all`（CLI 13.6MB / GUI 18.3MB + .pdb）、
+> e2e 下载（ripgrep 15.2.0 经镜像 4MB/s）全部通过。
+> 项目已从 0.5.1520 升级到 0.5.1665；1520  legacy 方案见附录 A。
 
-## 0. 为什么需要这套环境
+## 0. 1665 相对 1520 的关键变化
 
-- `perry check` 只做类型检查，**不需要**任何工具链；但 `perry compile` 需要
-  LLVM（clang/lld-link）+ Windows SDK/CRT + Perry runtime/stdlib 静态库。
-- **npm 包预编译的 stdlib 缺正则运行时入口**（`js_regexp_new` / `js_regexp_test` /
-  `js_string_match` / `js_string_match_value` / `js_string_replace_regex`）。
-  凡用正则字面量的模块（FileDB / ProxyManager / netFetch / GitHubAPIClient…）
-  链接必挂 `undefined symbol`。解法：`PERRY_WORKSPACE_ROOT` 指向 perry 源码树，
-  让 perry 用 cargo 按项目 imports 重建 runtime+stdlib（正则入口在 feature-gated
-  ext crate 里，重建后自动包含）。
-- 0.5.1665 的 npm stdlib 已补齐正则，但其 compact-map rewriter 对含 GC stackmap
-  的模块（GitHubSearchEngine / ProxyManager / GitHubAPIClient）报
-  "could not parse" 拒绝编译（RS4GC 开关与 clang 22/23 均无效）——**不要升级**，
-  留在 0.5.1520 + 源码重建。
-- 含 `try/catch` 的模块在 Windows lowered 成 WinEH funclet，与 RS4GC statepoint
-  pass 不兼容（上游 #7354）→ 全程 `PERRY_RS4GC=0`。
+| 项 | 0.5.1520 | 0.5.1665 |
+|---|---|---|
+| npm stdlib 正则入口 | 缺（需源码重建） | **已含**（无需 Rust/源码树） |
+| try/catch WinEH (#7354) | 必须 PERRY_RS4GC=0 | **已修复**，默认 statepoint GC |
+| 捆绑 .zst 库 | 首次链接自动解压 | **不自动解压**，需手动（§2.4） |
+| GC effects sidecar | 无 | runtime 旁需 perry_runtime.lib.gc-effects |
+| class 方法 $pshape (#14982) | 无此问题 | **Windows COFF 编译拒绝** → 对象字面量工厂适配 |
+| attest commit_sha | 构建目录非 git 时为空 | git 工作树内构建自动写入 |
+
+**#14982 适配规则（新增代码必须遵守）**：不要用 class 封装带 GC roots 的方法
+（闭包/网络回调/字符串字段），Windows 上其 $pshape 克隆产生 .def/.scl/.endef
+alias 记录落在 .llvm_stackmaps 之后，compact-map rewriter 拒绝整模块。
+用工厂函数 + 对象字面量（本项目 GitHubAPIClient/GitHubSearchEngine/ProxyManager/
+SelfUpdater 已重构，DownloadManager/repositories 本就是此风格）。
+最小复现与开关矩阵见上游 issue；所有编译器开关均无效，只能源码侧适配。
 
 ## 1. 目录布局（全部用户级，无需管理员权限）
 
 ```
 %LOCALAPPDATA%\perry\
-  llvm-mingw-20261117-ucrt-x86_64\bin\   clang / lld-link / llvm-lib / clang-cl / mt.exe
-  llvm-22.1.8\bin\                       clang-22.1.8 + LLVM-C.dll + mt.exe（llvm-mt）
-  windows-sdk\                           CRT + Windows SDK（xwin splat 产物）
-  perry-source\                          PerryTS/perry v0.5.1520 浅克隆
-  libs-flat\                             npm 包解压的 perry_runtime.lib + perry_stdlib.lib（测试用）
-  libs-ui\                               解压的 perry_ui_windows.lib（GUI 链接用）
-  link-shim\                             link.exe = lld-link 副本 + 依赖 DLL
-  .xwin-cache\                           xwin 下载缓存（必须与 windows-sdk 同盘！）
-%USERPROFILE%\.cargo\                    Rust stable（rustup）
+  llvm-mingw-20261117-ucrt-x86_64\bin\   clang / lld-link / llvm-lib / clang-cl / mt.exe + DLL
+  llvm-22.1.8\bin\                       llvm-mt（GUI manifest）+ LLVM-C.dll
+  windows-sdk\                            CRT + Windows SDK（xwin splat 产物）
+  libs-1665\                              手动解压的 1665 runtime/stdlib/UI + gc-effects sidecar
+  link-shim\                              [legacy 1520] lld-link 副本 + DLL
+  perry-source\                           [legacy 1520] PerryTS/perry v0.5.1520 浅克隆
+%USERPROFILE%\.cargo\                    [legacy 1520] Rust stable
 ```
 
 ## 2. 安装步骤
 
 ### 2.1 LLVM 工具链（llvm-mingw，免安装）
 
-GitHub 直连慢（实测 ~43KB/s），用镜像前缀 `https://gh-proxy.org/<原始URL>`
-（实测 ~347KB/s；4 并发分块 Range 下载可再快 4 倍）。
+GitHub 直连慢（~43KB/s），用镜像前缀 `https://gh-proxy.org/<原始URL>`
+（~347KB/s；4-6 并发 Range 分块再快数倍，校验拼接后总字节数）。
 
 ```bash
 # 下载 llvm-mingw-20261117-ucrt-x86_64.zip（191MB，mstorsjo/llvm-mingw releases）
 # 解压到 %LOCALAPPDATA%\perry\
 B=%LOCALAPPDATA%/perry/llvm-mingw-20261117-ucrt-x86_64/bin
 cp $B/ld.lld.exe $B/lld-link.exe     # lld 按 argv[0] 分发 flavor
-cp $B/clang-23.exe $B/clang-cl.exe   # 必须用真驱动 clang-23.exe！
-                                     # clang.exe 是 target-wrapper，改名不进 cl 模式
+cp $B/clang-23.exe $B/clang-cl.exe   # 必须用真驱动 clang-23.exe（clang.exe 是 wrapper）
 ```
 
 ### 2.2 mt.exe（manifest 工具，GUI 链接必需）
 
-lld-link 链接 GUI 时调 `mt.exe` 嵌入 manifest。llvm-mingw 不带；从官方
-LLVM-22.1.8-win64.exe 安装包用 7-Zip 解出 `bin/llvm-mt.exe`（无需运行安装器/UAC）：
-
-```bash
-7z x LLVM-22.1.8-win64.exe bin/llvm-mt.exe bin/LLVM-C.dll -o%LOCALAPPDATA%/perry/llvm-22.1.8
-cp .../llvm-mt.exe .../mt.exe
-# mt.exe 依赖 LLVM-C.dll：把 mt.exe+LLVM-C.dll 放进 llvm-mingw/bin 和
-# node_modules/@perryts/perry-win32-x64/bin（lld-link 的搜索不总走 PATH）
-```
+从官方 LLVM-22.1.8-win64.exe 用 7-Zip 解出 `bin/llvm-mt.exe` + `bin/LLVM-C.dll`
+（无需运行安装器/UAC），llvm-mt 改名 mt.exe，放到 llvm-mingw/bin 与
+node_modules/@perryts/perry-win32-x64/bin（lld-link 的搜索不总走 PATH）。
 
 ### 2.3 Windows SDK + CRT（xwin）
 
 ```bash
-npm install                              # 装 perry 0.5.1520（lockfile 锁定）
-# xwin.exe：npm 包不带。从 Jake-Shadle/xwin releases 下 0.10.0（0.9.0 对
-# Win11 SDK 26100 报 "unable to find x86_64 headers"）。放到项目根目录（perry 按 cwd 找）。
+npm install
+# xwin.exe：从 Jake-Shadle/xwin releases 下 0.10.0（0.9.0 对 Win11 SDK 26100 报错），
+# 放到项目根目录（perry 按 cwd 查找）
 export PERRY_LLVM_CLANG=$B/clang.exe PERRY_LLD_LINK=$B/lld-link.exe
-perry setup windows --accept-license     # 下载 ~700MB / 解压 ~1.5GB
+perry setup windows --accept-license
 ```
 
-**坑**：xwin 缓存默认在 cwd/.xwin-cache，splat 用 rename 移动文件——缓存与输出
-（%LOCALAPPDATA%\perry\windows-sdk）**必须同盘**，否则 os error 17。在 C 盘目录
-下运行 setup，或先把 .xwin-cache 移到 C 盘。
+**坑**：xwin 缓存（cwd/.xwin-cache）与输出（%LOCALAPPDATA%\perry\windows-sdk）
+必须同盘（splat 用 rename，跨盘 os error 17）。
 
-### 2.4 Rust + Perry 源码（正则运行时重建）
+### 2.4 解压 1665 捆绑库（新增必需步骤）
 
-```bash
-# rustup（国内用 rsproxy 镜像，static.rust-lang.org 直连很慢）
-RUSTUP_DIST_SERVER=https://rsproxy.cn RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup \
-  rustup-init.exe -y --profile minimal --default-toolchain stable
-# ~/.cargo/config.toml 配 rsproxy sparse registry（见该文件）
+1665 不自动解压 npm 包里的 .zst 库。用任意 zstd 工具（如 Python `zstandard`）：
 
-git clone --depth 1 --branch v0.5.1520 \
-  https://gh-proxy.org/https://github.com/PerryTS/perry.git \
-  %LOCALAPPDATA%/perry/perry-source
-
-# link-shim：cargo/rustc 的 MSVC 链接器
-mkdir %LOCALAPPDATA%/perry/link-shim
-cp $B/lld-link.exe %LOCALAPPDATA%/perry/link-shim/link.exe
-cp $B/libLLVM-23.dll $B/libc++.dll $B/libunwind.dll $B/libwinpthread-1.dll \
-   %LOCALAPPDATA%/perry/link-shim/    # 副本离开原目录会 0xc0000135 (DLL not found)
+```python
+# pip install zstandard
+import zstandard as zstd, shutil, os
+src = r"node_modules/@perryts/perry-win32-x64/lib"
+dst = os.path.expandvars(r"%LOCALAPPDATA%\perry\libs-1665")
+os.makedirs(dst, exist_ok=True)
+for name in ["perry_runtime.lib.zst", "perry_stdlib.lib.zst", "perry_ui_windows.lib.zst"]:
+    with open(os.path.join(src, name), "rb") as f, open(os.path.join(dst, name[:-4]), "wb") as g:
+        zstd.ZstdDecompressor().copy_stream(f, g)
+shutil.copy(os.path.join(src, "perry_runtime.lib.gc-effects"), dst)  # sidecar 必需
 ```
 
-**坑**：不设 `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER` 的话，rustc 会在 PATH
-里找到 git-bash 的 `/usr/bin/link.exe`（coreutils 硬链接工具）并报 "extra operand"。
-脚本里已显式指向 link-shim。
-
-### 2.5 GUI 库与测试库（.zst 手动解压）
-
-perry 首次链接会自动解压 npm 包的 runtime/stdlib 到 `libs/<hash>/`，但**该缓存
-目录不在后续编译的搜索路径里**（perry bug）→ 展平到 libs-flat/ 并用
-`PERRY_RUNTIME_DIR`/`PERRY_LIB_DIR` 显式指定。`perry_ui_windows.lib.zst` 则完全
-不会自动解压 → 手动解压到 libs-ui/（Python `zstandard` 或任何 zstd 工具）。
+升级 perry 版本后需重新解压对应版本的库（勿混用旧版 runtime/stdlib）。
 
 ## 3. 日常使用
 
 ```bash
 npm run check          # 类型检查（无需工具链）
 npm run test           # 离线回归：并发 59 + FileDB 26 + 资产选择 19 断言（真实二进制）
-npm run test:net       # 网络回归：下载完整性契约（需外网，走 gh-proxy 镜像）
-npm run build:cli      # dist/HamsterStore.exe + attest
+npm run test:net       # 网络回归：下载完整性契约（需外网；镜像瞬时抖动可致偶发失败，重跑确认）
+npm run build:cli      # dist/HamsterStore.exe + attest（commit_sha 自动写入）
 npm run build:gui      # dist/HamsterStore-GUI.exe + .pdb + attest
 npm run build:all
 ```
 
-脚本链：`build.sh` → `perry-source-env.sh` → `llvm-build-env.sh`。
-首次构建 cargo 重建 runtime+stdlib 约几分钟；之后走缓存，秒级。
+脚本链：`build.sh` / `test-*.sh` → `llvm-build-env.sh`（1665 环境）。
+跨版本升级后先 `npx perry cache clean`（对象缓存避免混用）。
 
-## 4. 环境变量速查（脚本已封装，此处供排查）
+## 4. 环境变量速查（脚本已封装）
 
 | 变量 | 值 | 原因 |
 |---|---|---|
-| `PERRY_RS4GC` | `0` | try/catch WinEH funclet 与 statepoint pass 不兼容（#7354） |
-| `PERRY_WORKSPACE_ROOT` | perry-source（Windows 路径） | 触发 cargo 重建，补正则入口 |
 | `PERRY_LLVM_CLANG` | llvm-mingw/bin/clang.exe | codegen 汇编步骤 |
 | `PERRY_LLD_LINK` | llvm-mingw/bin/lld-link.exe | 链接器 |
-| `PERRY_RUNTIME_DIR`/`PERRY_LIB_DIR` | libs-flat（测试）/ libs-ui（GUI） | 解压缓存不在搜索路径 |
-| `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER` | link-shim/link.exe | 避开 git-bash 假 link.exe |
-| `CC`/`CXX`/`AR` | clang-cl / llvm-lib | cc-rs 编译 mimalloc 等 C 依赖 |
-| `LIB`/`INCLUDE` | xwin sysroot 路径 | cargo 链接系统库 |
+| `PERRY_RUNTIME_DIR`/`PERRY_LIB_DIR` | libs-1665 | 1665 不自动解压/不搜索缓存 |
+| `PERRY_RS4GC` | 不设置（默认 statepoint） | #7354 已修复；=0 回退 shadow stack 仅调试用 |
+| `CC`/`CXX`/`AR`/`LIB`/`INCLUDE` | [legacy 1520] | 源码重建时 cc-rs/cargo 用 |
 
 ## 5. 已知限制
 
-- `PERRY_RS4GC=0` 关闭精确 GC stackmap 重写（保守扫描回退）。含 try/catch 的
-  模块在 #7354 修复前别无选择；作者此前的手工链接脚本同样用 RS4GC=0。
-- 0.5.1665 不可用（compact-map rewriter 拒绝 3 个核心模块），升级前先在
-  隔离目录验证 `perry compile src/main.ts`。
-- `perry doctor` 的 "system linker OK" 是误报（找到的是 git-bash link.exe）；
-  "runtime library not found" 在源码重建路径下可忽略。
+- #14982 未修复（open, effort:S）：class 方法模式在 Windows 编译拒绝，遵守 §0 适配规则。
+- net 测试依赖真实外网与镜像可用性，偶发失败先重跑再排查。
+- `perry doctor` 的 "system linker OK" 是误报（git-bash link.exe）；
+  "runtime library not found" 在手动解压 + PERRY_RUNTIME_DIR 路径下可忽略。
+
+## 附录 A：Legacy 0.5.1520 源码重建（仅回退时需要）
+
+1520 的 npm stdlib 缺正则入口（js_regexp_new 等 5 符号），需：
+1. Rust stable（rustup，rsproxy.cn 镜像）+ ~/.cargo/config.toml 配 rsproxy sparse registry
+2. `git clone --depth 1 --branch v0.5.1520 https://github.com/PerryTS/perry.git` 到 perry-source
+3. link-shim：lld-link 副本命名 link.exe + libLLVM-23/libc++/libunwind/libwinpthread DLL
+   （rustc 否则找到 git-bash 假 link.exe；副本缺 DLL 报 0xc0000135）
+4. `source scripts/perry-source-env.sh`（PERRY_WORKSPACE_ROOT + CC/CXX/AR/LIB/INCLUDE +
+   CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER + PERRY_RS4GC=0）
+5. 首次构建 cargo 重建 runtime+stdlib（几分钟），之后走缓存
+6. GUI 还需手动解压 perry_ui_windows.lib.zst（1520 也不自动解压 UI 库）

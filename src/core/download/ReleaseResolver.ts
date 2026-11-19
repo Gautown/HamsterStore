@@ -6,7 +6,7 @@
 // pickWindowsAsset 是纯函数，离线单测覆盖（src/tests/release.test.ts）。
 
 import type { Asset, Release } from "../../types";
-import { GitHubAPIClient } from "../sync/GitHubAPIClient";
+import { GitHubAPIClient, createGitHubAPIClient } from "../sync/GitHubAPIClient";
 import { PackageRepository } from "../../data";
 
 export interface ResolvedDownload {
@@ -103,7 +103,7 @@ export function resolveReleaseDownload(
     const parsed = GitHubAPIClient.parseOwnerRepo(repoUrl);
     if (!parsed) { onDone(null); return; }
 
-    const client = new GitHubAPIClient(token);
+    const client = createGitHubAPIClient(token);
     client.getLatestRelease(parsed.owner, parsed.repo, (rel: Release | null) => {
         if (!rel || !rel.assets || rel.assets.length === 0) { onDone(null); return; }
         const asset = pickWindowsAsset(rel.assets);
