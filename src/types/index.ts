@@ -2,7 +2,7 @@
 
 export type PlatformType = 'windows' | 'macos' | 'linux' | 'universal';
 
-export type SourceType = 'github_repo' | 'awesome_list' | 'awesome_sublist';
+export type SourceType = 'github_repo' | 'github_release' | 'awesome_list' | 'awesome_sublist';
 
 export type DataSource = 'api' | 'crawler' | 'cache';
 

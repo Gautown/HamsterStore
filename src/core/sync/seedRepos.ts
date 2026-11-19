@@ -2,9 +2,7 @@
 // 替换为高质量 Windows 软件推荐仓库 + 支持 GitHub Releases 直接抓取
 
 import type { Source } from "../../types";
-import { SourceRepository, PackageRepository } from "../../data";
-import { GitHubAPIClient } from "./GitHubAPIClient";
-import { BUILT_IN_PACKAGES } from "./BuiltInData";
+import { SourceRepository } from "../../data";
 
 // Perry v0.5.1220: 全局对象初始化时可能存在只读属性问题
 // 使用安全访问模式
@@ -214,32 +212,4 @@ function createSource(seed: typeof SEED_REPOS[0], listRepo: string): void {
         list_repo: listRepo,
         parser_config: seed.parserConfig,
     });
-}
-
-// 首次启动注入真实种子软件库（BUILT_IN_PACKAGES）— 保证离线/未 sync 也能展示真实数据。
-// 仅当本地软件包极少时注入，避免覆盖用户已 sync 的数据。
-export function seedBuiltInPackages(): number {
-    const source = SourceRepository.getAll().find((s: any) => s.owner === "sindresorhus" && s.repo === "awesome");
-    const sourceId = source ? source.id : 0;
-    let created = 0;
-    for (let i = 0; i < BUILT_IN_PACKAGES.length; i++) {
-        const p = BUILT_IN_PACKAGES[i];
-        const name = p.owner + "/" + p.repo;
-        const hash = GitHubAPIClient.urlHash(p.url);
-        if (PackageRepository.getByUrlHash(hash)) continue;
-        PackageRepository.create({
-            source_id: sourceId,
-            name,
-            version: "",
-            description: p.description,
-            categories: JSON.stringify([p.category]),
-            platform_assets: "[]",
-            project_url: p.url,
-            url_hash: hash,
-            download_url: p.url,
-            data_source: "builtin-awesome",
-        });
-        created++;
-    }
-    return created;
 }

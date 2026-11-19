@@ -8,7 +8,7 @@ export class SourceSyncer {
     syncAll(): number {
         let ok = 0;
         
-        // Built-in packages from BUILT_IN_PACKAGES (144 条真实数据)
+        // Built-in packages from BUILT_IN_PACKAGES (132 条真实数据)
         for (let i = 0; i < BUILT_IN_PACKAGES.length; i++) {
             const p = BUILT_IN_PACKAGES[i];
             const name = p.owner + "/" + p.repo;
