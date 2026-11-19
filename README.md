@@ -82,8 +82,9 @@ npm run build:all              # 双编译
 生产 GUI 入口 (`src/gui/main.ts`) 仍是**最小化窗口**（标题 + 软件包数）。
 
 **2026-11-19 复现调查**（详见 [docs/CRASH_REPRO.md](docs/CRASH_REPRO.md)）：
-完整 Bento UI 已恢复为工作台（`src/gui/_repro.ts` + `src/ui/` 22 文件 +
-install/process/update 依赖），在 Perry 0.5.1520 下编译通过、渲染真实数据、
+完整 Bento UI 已恢复为工作台（`src/gui/_repro.ts` + `src/ui/` 20 文件 +
+install/process/update 依赖，全部通过 0.5.1665 合规审计，见
+[docs/PERRY_COMPLIANCE.md](docs/PERRY_COMPLIANCE.md)），编译通过、渲染真实数据、
 **启动期 08-10 栈溢出未复现**（90s+ 稳定）。交互导航待人工点击验证——
 通过后把 _repro 接线替换 gui/main.ts 即可复活 8 页面 UI。
 注意：DownloadManager v5 的 getState/getQueued 是 stub，下载管理页需先补齐。

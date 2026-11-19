@@ -12,6 +12,7 @@ import { DownloadManager } from "../../core/download/DownloadManager";
 import { COLORS, RADIUS, SPACING, FONT } from "../styles/theme";
 import { existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { spawn } from "node:child_process";
 
 // 全局刷新回调
 let _rebuildBody: (() => void) | null = null;
@@ -264,7 +265,6 @@ function openDownloadedFile(url: string): void {
 
         if (existsSync(filePath)) {
             // 使用 rundll32 打开文件
-            const { spawn } = require("node:child_process");
             const proc = spawn("rundll32", ["url.dll,FileProtocolHandler", filePath], {
                 detached: true,
                 stdio: "ignore",
@@ -272,7 +272,6 @@ function openDownloadedFile(url: string): void {
             proc.unref();
         } else {
             // 文件不存在，尝试打开文件夹
-            const { spawn } = require("node:child_process");
             spawn("explorer", [downloadDir], { detached: true, stdio: "ignore" }).unref();
         }
     } catch (e: any) {

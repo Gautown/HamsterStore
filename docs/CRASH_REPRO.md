@@ -59,8 +59,9 @@ HamsterStore-GUI.exe.attest.json
 ## 2026-11-19 复现调查（Perry 0.5.1520 + PERRY_RS4GC=0）
 
 工作台：`src/gui/_repro.ts`（等价 bc80286 的 v2 完整接线：initDatabase +
-buildMainBody + App），配套恢复 `src/ui/`（22 文件，修复 7 处相对路径）与
-`src/core/{install,process,update}`（UI 组件依赖，此前随孤儿清理移除）。
+buildMainBody + App），配套恢复 `src/ui/`（20 文件，修复 7 处相对路径 + 导出
+runSearch；删除 2 个死代码实验文件）与 `src/core/{install,process,update}`
+（UI 组件依赖，已做 1665 合规重写，见 docs/PERRY_COMPLIANCE.md）。
 
 ```bash
 source scripts/perry-source-env.sh

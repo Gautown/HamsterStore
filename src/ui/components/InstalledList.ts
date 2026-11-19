@@ -8,9 +8,8 @@ import {
     textSetFontSize, textSetColor,
 } from "perry/ui";
 import { InstallationRepository, PackageRepository } from "../../data";
-import { execSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { InstallManager } from "../../core/install/InstallManager";
-import { ProcessManager } from "../../core/process/ProcessManager";
 import { COLORS, RADIUS, SPACING, FONT } from "../styles/theme";
 
 export function InstalledList(): Widget {
@@ -51,7 +50,8 @@ export function InstalledList(): Widget {
             const exeName = pkgName;
             const launchBtn = Button("启动", () => {
                 try {
-                    execSync('start "" "' + exeName + '.exe"', { stdio: "ignore", timeout: 3000 });
+                    const child = spawn("cmd", ["/c", "start", "", exeName + ".exe"], { detached: true, stdio: "ignore" });
+                    try { child.unref(); } catch {}
                 } catch { /* ignore */ }
             });
 

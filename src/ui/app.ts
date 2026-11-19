@@ -114,7 +114,7 @@ export function navigateToDetail(packageId: number): void {
 defineGlobal("__hamsterRunSearch", runSearch);
 defineGlobal("__hamsterCloseWindow", () => { try { process.exit(0); } catch {} });
 
-function runSearch(query: string): void {
+export function runSearch(query: string): void {
     searchQuery = (query || "").trim().toLowerCase();
     selectedCategory = null;
     selectedSourceId = 0;

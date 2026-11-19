@@ -55,7 +55,9 @@ export function UpdateCenter(): Widget {
                             // 触发更新：重新下载安装
                             if (pkg) {
                                 try {
-                                    InstallManager.install(pkg.id);
+                                    InstallManager.install(pkg.id, undefined, (inst) => {
+                                        if (inst) console.log("[Update] 已安装: " + pkg.name);
+                                    });
                                 } catch {}
                             }
                         });

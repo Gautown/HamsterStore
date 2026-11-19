@@ -159,7 +159,6 @@ export const DownloadManager = {
     openInBrowser(url: string): void {
         // rundll32 依赖回调确认，改用 cmd start（spawn 数组，fire-and-forget）
         try {
-            const { spawn } = require("node:child_process");
             const child = spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" });
             try { child.unref(); } catch {}
         } catch {}
