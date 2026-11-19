@@ -10,8 +10,10 @@
     "build:gui": "bash scripts/build.sh gui",
     "build:all": "bash scripts/build.sh all",
     "dev:windows": "perry dev --target windows",
-    "test": "bash scripts/test-concurrent.sh",
+    "test": "bash scripts/test-concurrent.sh && bash scripts/test-filedb.sh",
     "test:concurrent": "bash scripts/test-concurrent.sh",
+    "test:filedb": "bash scripts/test-filedb.sh",
+    "test:net": "bash scripts/test-net.sh",
     "clean": "rm -rf dist"
   },
   "keywords": [

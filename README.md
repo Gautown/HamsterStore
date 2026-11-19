@@ -33,7 +33,9 @@ src/
     models/             # 7 数据模型
     repositories/       # 6 Repository CRUD
   tests/
-    concurrent.test.ts  # 59 断言，编译为真实二进制运行
+    concurrent.test.ts  # 并发基础设施 59 断言
+    filedb.test.ts      # FileDB SQL 子集 + 原子写盘 22 断言
+    net.test.ts         # 网络完整性契约 10 断言（需外网）
   types/                # 共享类型
 ```
 
@@ -59,7 +61,8 @@ hamsterstore help                # 帮助
 ```bash
 npm install                    # 安装依赖 (perry 0.5.1520，lockfile 锁定)
 npm run check                  # perry check 类型检查（无需工具链）
-npm run test                   # 并发测试：编译真实原生二进制并运行 (59 断言)
+npm run test                   # 离线回归：并发 59 断言 + FileDB 22 断言（真实二进制）
+npm run test:net               # 网络回归：下载完整性/404 拒绝（需外网，10 断言）
 npm run build:cli              # dist/HamsterStore.exe (~13 MB) + attest
 npm run build:gui              # dist/HamsterStore-GUI.exe + .pdb + attest
 npm run build:all              # 双编译

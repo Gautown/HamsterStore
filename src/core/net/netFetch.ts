@@ -4,6 +4,15 @@
 //   - spawn(数组参数, detached, stdio:ignore) + 输出文件 + setInterval 大小轮询：API/下载/header/& 全部可靠
 //   - setInterval 回调在真实 GUI 二进制中可正常触发（probe timeout 日志来自它）
 // 本模块全部基于以上三条被验证的事实，绝不使用 Promise/async/子进程事件回调。
+//
+// 完整性契约（2026-11-19 加固）：
+//   - GET/HEAD/下载一律 curl -f：HTTP >=400 不产出 body，回调 ok=false
+//     （此前 404 错误页会被当成成功 body 传给 JSON.parse）
+//   - netDownload：total(Content-Length) 已知时，最终字节数必须 >= total 才算成功；
+//     达到 total 立即完成（不再空等 2s 稳定窗口）。传输停顿产生的半截文件
+//     会因 size < total 判失败 → DownloadManager 直连重试。
+//   - netProbe 例外：不加 -f（探活语义 = 任何 HTTP 响应都证明节点可达）
+//   - 残余限制：total 未知（HEAD 拿不到 Content-Length）时仍只能靠大小稳定判定
 
 import { spawn } from "node:child_process";
 import { statSync, existsSync, unlinkSync, mkdirSync, readFileSync } from "node:fs";
@@ -82,7 +91,7 @@ export function netGetText(url: string, opts: NetOptions, onDone: (ok: boolean, 
     const dir = tmpNetDir();
     const outFile = join(dir, `get_${reqId()}.body`);
     const timeoutMs = opts.timeoutMs || 15000;
-    const args: string[] = ["-sSL",
+    const args: string[] = ["-sSfL",
         "--connect-timeout", String(Math.max(3, Math.floor(timeoutMs / 2000))),
         "--max-time", String(Math.floor(timeoutMs / 1000)),
         "-o", outFile];
@@ -120,7 +129,7 @@ export function netProbe(url: string, timeoutMs: number, onDone: (latencyMs: num
 export function netContentSize(url: string, timeoutMs: number, onDone: (bytes: number) => void): void {
     const dir = tmpNetDir();
     const outFile = join(dir, `size_${reqId()}.hdr`);
-    const args = ["-sSI",
+    const args = ["-sSfI",
         "--connect-timeout", String(Math.max(3, Math.floor(timeoutMs / 2000))),
         "--max-time", String(Math.max(4, Math.floor(timeoutMs / 1000))),
         "-o", outFile, url];
@@ -143,7 +152,7 @@ export function netDownload(
     const timeoutMs = opts.timeoutMs || 300000;
     // 先取总大小（拿不到就 -1，进度显示已下载字节）
     netContentSize(url, 10000, (total: number) => {
-        const args: string[] = ["-sSL", "--retry", "2", "--retry-delay", "3",
+        const args: string[] = ["-sSfL", "--retry", "2", "--retry-delay", "3",
             "--connect-timeout", "10", "--max-time", String(Math.floor(timeoutMs / 1000)),
             "-o", destPath];
         if (opts.headers) {
@@ -173,14 +182,22 @@ export function netDownload(
             lastSize = size;
             onProgress(size, total);
 
-            if (stable >= 5 && size > 0) {
+            // 完整性判定：total 已知时字节数必须达标；未知时退化为「非空即成功」
+            const complete = total > 0 ? size >= total : size > 0;
+            // 达到 Content-Length 立即完成，不空等稳定窗口
+            if (total > 0 && size >= total) {
                 clearInterval(timer);
                 onDone(true, size, Date.now() - start);
                 return;
             }
+            if (stable >= 5 && size > 0) {
+                clearInterval(timer);
+                onDone(complete, size, Date.now() - start);
+                return;
+            }
             if (Date.now() >= deadline) {
                 clearInterval(timer);
-                onDone(size > 0, size, Date.now() - start);
+                onDone(complete, size, Date.now() - start);
             }
         }, POLL_MS);
     });

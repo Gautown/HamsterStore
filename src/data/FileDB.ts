@@ -4,7 +4,7 @@
 //      prepare 时刻的 arguments 永远为空 → WHERE ? 全部匹配失败（getById 一直是 undefined）
 //   2. 补 UPDATE/DELETE 分支：此前走 _noop，updateStatus/markDone/deleteById 全部静默失效
 //   3. INSERT 混合字面量：VALUES (?, ?, 0.0) 中字面量被丢弃 → 按 ? 序数对位填充
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
 
 interface TableData {
@@ -251,6 +251,11 @@ export class FileDB {
             if (orderIdx > 0) {
                 let orderStart = orderIdx + 6;
                 while (orderStart < upper.length && upper[orderStart] === " ") orderStart++;
+                // 修复：跳过 BY 关键字（此前 orderCol 被解析成 "BY" → 排序静默失效）
+                if (upper.startsWith("BY", orderStart)) {
+                    orderStart += 2;
+                    while (orderStart < upper.length && upper[orderStart] === " ") orderStart++;
+                }
                 let orderStr = "";
                 for (let i = orderStart; i < trimmed.length; i++) {
                     if (upper.startsWith("LIMIT", i)) break;
@@ -265,8 +270,11 @@ export class FileDB {
             let limitVal: number | null = null;
             const limitIdx = upper.indexOf(" LIMIT");
             if (limitIdx >= 0) {
+                // 修复：跳过 LIMIT 后的空白（此前从空格处截断 → limitStr 恒空 → LIMIT 失效）
+                let limitStart = limitIdx + 6;
+                while (limitStart < trimmed.length && (trimmed[limitStart] === " " || trimmed[limitStart] === "\t")) limitStart++;
                 let limitStr = "";
-                for (let i = limitIdx + 6; i < trimmed.length; i++) {
+                for (let i = limitStart; i < trimmed.length; i++) {
                     const c = trimmed[i];
                     if (c === " " || c === "\t") break;
                     limitStr += c;
@@ -275,15 +283,22 @@ export class FileDB {
                 if (isNaN(limitVal)) limitVal = null;
             }
 
-            // 条件结构解析（AND 分隔的 col = ? 列表）
-            const conditions: Array<{ col: string; val: any; isLike: boolean }> = [];
+            // 条件结构解析（AND 分隔的 col = ? / LIKE ? / IN (...) 列表）
+            const conditions: Array<{ col: string; val: any; isLike: boolean; inVals?: string[] }> = [];
             if (whereClause) {
                 const andParts = whereClause.split(/\s+AND\s+/i);
-                let paramCursor = 0;
                 for (const part of andParts) {
                     const likeM = part.match(/^(.+?)\s+LIKE\s+\?$/i);
                     if (likeM) {
-                        conditions.push({ col: likeM[1].trim(), val: paramCursor++, isLike: true });
+                        // 修复：LIKE 参数也存 "?" 标记，由 all() 按序对位 callArgs
+                        // （此前存 paramCursor 数字，resolver 只认 "?" → LIKE 永远匹配字面量 "0"）
+                        conditions.push({ col: likeM[1].trim(), val: "?", isLike: true });
+                        continue;
+                    }
+                    const inM = part.match(/^(.+?)\s+IN\s+\((.+)\)$/i);
+                    if (inM) {
+                        const vals = inM[2].split(",").map((s: string) => s.trim().replace(/^['"]|['"]$/g, ""));
+                        conditions.push({ col: inM[1].trim(), val: null, isLike: false, inVals: vals });
                         continue;
                     }
                     const eqM = part.match(/^(.+?)\s*=\s*(\?|'[^']*'|"[^"]*"|\d+)$/i);
@@ -318,6 +333,10 @@ export class FileDB {
                             let ok = true;
                             for (const cond of resolved) {
                                 const cell = String(r ? r[cond.col] : "");
+                                if (cond.inVals) {
+                                    if (cond.inVals.indexOf(cell) < 0) { ok = false; break; }
+                                    continue;
+                                }
                                 const want = String(cond.val);
                                 if (cond.isLike ? !cell.includes(want) : cell !== want) {
                                     ok = false;
@@ -365,7 +384,11 @@ export class FileDB {
         if (!t) return;
         const path = join(this.dbDir, tableName + ".json");
         const json = JSON.stringify(t.rows, null, 2);
-        writeFileSync(path, json, "utf8");
+        // 原子写盘：先写 .tmp 再 rename 覆盖（NTFS 同卷 rename 原子）。
+        // 直接 writeFileSync 时崩溃/断电会留下半截 JSON，_load 静默丢表。
+        const tmp = path + ".tmp";
+        writeFileSync(tmp, json, "utf8");
+        renameSync(tmp, path);
     }
 }
 
