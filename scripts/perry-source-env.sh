@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# [LEGACY — 仅回退 Perry 0.5.1520 时需要] 源码重建环境
-# 0.5.1665 起 npm stdlib 已含正则入口，日常构建用 llvm-build-env.sh 即可。
-# 本脚本保留 1520 时代的 PERRY_WORKSPACE_ROOT 源码重建路径（补正则运行时入口）。
-# Perry 0.5.1520 源码重建环境 — 在 llvm-build-env.sh 基础上启用 PERRY_WORKSPACE_ROOT
-# 用途：npm 预编译 stdlib 缺正则运行时入口（js_regexp_new / js_regexp_test /
-#       js_string_match / js_string_match_value / js_string_replace_regex），
-#       凡用正则字面量的模块（FileDB/ProxyManager/netFetch/GitHubAPIClient…）链接必挂。
-#       指向 perry 源码树后，perry 会按项目 imports 用 cargo 重建 runtime+stdlib（含正则）。
-# 用法： source scripts/perry-source-env.sh && npx perry compile src/main.ts -o dist/HamsterStore.exe
+# 主构建环境 — Perry 0.5.1520（源码重建 runtime + stdlib + UI，单次 cargo 解析）
+#
+# 为什么锁 0.5.1520 而不是最新 0.5.1665：
+#   官方 npm 包 0.5.1664/1665 的 perry_ui_windows.lib 由另一次独立 cargo 构建产出，
+#   内嵌了第二份 perry_runtime（元数据 hash 与 runtime/stdlib 的不同）。链接后 exe 的
+#   .perryat 段出现两个 ATOM_START 标记 → seed_static_atoms 按 24 字节步长解析错位 →
+#   在**任何用户代码之前**空指针崩溃，且任何容器控件（VStack/HStack/Divider/Button）必崩。
+#   实测矩阵见 docs/PERRY_COMPLIANCE.md；上游无 1666+ 修复版。
+#   0.5.1520 的 runtime/stdlib/UI 由同一工作区构建，单一标记，GUI 稳定（2026-11-20 本机 14min+）。
+#
+# 1520 的 npm 预编译 stdlib 缺正则运行时入口（js_regexp_new 等），故设
+#   PERRY_WORKSPACE_ROOT → perry 自动 cargo 重建 runtime+stdlib（含正则）；
+#   PERRY_LIB_DIR=libs-ui 暴露源建 perry_ui_windows.lib（仅该文件，不遮蔽重建产物）。
 #
 # 前置（见 docs/BUILD.md）：
-#   - Rust stable（rustup，rsproxy.cn 镜像）
-#   - perry 源码：git clone --depth 1 --branch v0.5.1520 https://github.com/PerryTS/perry.git
-#     到 $LOCALAPPDATA/perry/perry-source（GitHub 慢可加 https://gh-proxy.org/ 前缀）
-#   - link-shim：$LOCALAPPDATA/perry/link-shim/link.exe = lld-link.exe 的副本
-#     （perry 把 cargo 链接器指向这里，代替 MSVC link.exe）
+#   - Rust stable（rustup，rsproxy.cn 镜像）+ cargo 缓存已就绪
+#   - perry 源码：git clone --depth 1 --branch v0.5.1520 → $LOCALAPPDATA/perry/perry-source
+#   - link-shim：$LOCALAPPDATA/perry/link-shim/link.exe = lld-link.exe 副本（带 DLL）
 #   - xwin sysroot：$LOCALAPPDATA/perry/windows-sdk（perry setup windows）
 
 source "$(dirname "${BASH_SOURCE[0]}")/llvm-build-env.sh"
@@ -26,6 +28,9 @@ LV_WIN="$USERPROFILE\\AppData\\Local\\perry\\llvm-mingw-20261117-ucrt-x86_64\\bi
 
 export PERRY_WORKSPACE_ROOT="${PERRY_SRC//\//\\}"
 export PATH="$HOME/.cargo/bin:$PATH"
+
+# #7354：WinEH funclet 与 statepoint pass 不兼容（1520 必须关闭 RS4GC；1665 已修复但 GUI 不可用）
+export PERRY_RS4GC=0
 
 # cargo/cc-rs/lld-link 消费 Windows 风格路径
 export LIB="$WS_WIN\\crt\\lib\\x86_64;$WS_WIN\\sdk\\lib\\um\\x86_64;$WS_WIN\\sdk\\lib\\ucrt\\x86_64"

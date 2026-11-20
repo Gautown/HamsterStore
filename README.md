@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-- **Perry v0.5.1665** — TypeScript to native compiler (LLVM + Clang + LLD，无 MSVC 依赖，搭建见 [docs/BUILD.md](docs/BUILD.md))
+- **Perry v0.5.1520**（锁版）— TypeScript to native compiler (LLVM + Clang + LLD，无 MSVC 依赖，搭建见 [docs/BUILD.md](docs/BUILD.md)；1664/1665 GUI 库有上游打包事故，见 [docs/PERRY_COMPLIANCE.md](docs/PERRY_COMPLIANCE.md))
 - **FileDB** — 纯 TS JSON 持久化 (~/.hamsterstore/filedb/*.json)，手写 SQL 子集解析，绕过 better-sqlite3 stub
 - **netFetch** — 统一网络原语：spawn curl (数组参数) + 输出文件大小轮询，回调式，零 Promise/子进程事件依赖
 - **CategoryEngine** — 17 类标准分类 + 关键词推断
@@ -17,7 +17,7 @@
 ```
 src/
   main.ts               # CLI 入口 (v1.4)
-  gui/main.ts           # GUI 入口 (v1.3，最小化窗口，见下文)
+  gui/main.ts           # GUI 入口 (v2，完整 Bento UI，见下文)
   core/
     sync/               # SourceSyncer + GitHubAPIClient + BuiltInData(132) + seedRepos(15)
     discovery/          # GitHubSearchEngine (公开搜索，netFetch 回调式)
@@ -61,7 +61,7 @@ hamsterstore help                # 帮助
 ## 构建与测试
 
 ```bash
-npm install                    # 安装依赖 (perry 0.5.1665，lockfile 锁定)
+npm install                    # 安装依赖 (perry 0.5.1520，lockfile 锁定)
 npm run check                  # perry check 类型检查（无需工具链）
 npm run test                   # 离线回归：并发 59 + FileDB 26 + 资产选择 19 断言（真实二进制）
 npm run test:net               # 网络回归：下载完整性/404 拒绝（需外网，10 断言）
@@ -70,24 +70,33 @@ npm run build:gui              # dist/HamsterStore-GUI.exe + .pdb + attest
 npm run build:all              # 双编译
 ```
 
-**首次构建前必须搭建工具链**（LLVM + xwin Windows SDK + 手动解压 1665 捆绑库，
-全部用户级安装，无需管理员权限，无需 Rust/源码树）：完整步骤见
-[docs/BUILD.md](docs/BUILD.md)。要点：1665 不自动解压 npm 捆绑 .zst 库，需手动
-解压到 libs-1665 并设 `PERRY_RUNTIME_DIR`/`PERRY_LIB_DIR`（脚本已封装）；
-上游 #14982（class 方法 $pshape COFF alias）未修复，网络/代理/更新模块已重构为
-对象字面量工厂适配，**新增代码避免用 class 封装带 GC roots 的方法**。
+**首次构建前必须搭建工具链**（LLVM + xwin Windows SDK + Rust + perry v0.5.1520
+源码树，全部用户级安装，无需管理员权限）：完整步骤见 [docs/BUILD.md](docs/BUILD.md)。
+要点：1520 的 npm stdlib 缺正则运行时入口，`PERRY_WORKSPACE_ROOT` 指向源码树后由
+cargo 重建 runtime+stdlib 补全（脚本已封装，首次数分钟，之后走缓存）；UI 库手动解
+压到 `libs-ui/`；含 try/catch 的模块必须 `PERRY_RS4GC=0`（上游 #7354）。
+**新增代码避免用 class 封装带 GC roots 的方法**（#14982 前瞻规则，用工厂函数 +
+对象字面量）。
 
-## GUI 现状（诚实说明）
+## GUI 现状
 
-生产 GUI 入口 (`src/gui/main.ts`) 仍是**最小化窗口**（标题 + 软件包数）。
+生产 GUI 入口 (`src/gui/main.ts`) 是完整 **Bento UI（9 页面）**：首页统计 / 软件库 /
+精选推荐 / 分类浏览 / 下载管理 / 去重报告 / 已安装 / 更新中心 / 设置，对标 Microsoft Store。
+Perry 锁 0.5.1520，实机渲染 145 个软件包、15 个源。
 
-**2026-11-19 复现调查**（详见 [docs/CRASH_REPRO.md](docs/CRASH_REPRO.md)）：
-完整 Bento UI 已恢复为工作台（`src/gui/_repro.ts` + `src/ui/` 20 文件 +
-install/process/update 依赖，全部通过 0.5.1665 合规审计，见
-[docs/PERRY_COMPLIANCE.md](docs/PERRY_COMPLIANCE.md)），编译通过、渲染真实数据、
-**启动期 08-10 栈溢出未复现**（90s+ 稳定）。交互导航待人工点击验证——
-通过后把 _repro 接线替换 gui/main.ts 即可复活 8 页面 UI。
-注意：DownloadManager v5 的 getState/getQueued 是 stub，下载管理页需先补齐。
+![Bento UI 首页](docs/screenshot-home.png)
+
+**2026-11-20 崩溃根因定位**（详见 [docs/CRASH_REPRO.md](docs/CRASH_REPRO.md)）：
+08-10 `EXCEPTION_STACK_OVERFLOW` 的真因不是 UI 代码递归，而是上游 0.5.166x
+npm 发布包的 `perry_ui_windows.lib` 内嵌了**第二份 perry_runtime**（独立 cargo
+解析，元数据 hash 不同），链接后 exe 的 `.perryat` 段出现两个 `ATOM_START` 标记 →
+运行时 `seed_static_atoms` 按 24 字节步长解析错位 → 在用户代码之前崩溃；任何容器
+控件（VStack/HStack/Button/Divider）必崩也由此而来。0.5.1520 的 runtime/stdlib/UI
+出自同一工作区（单一标记），完整 UI **实机运行 14 分钟+ 无崩溃**。1664/1665 的
+证据链、探针矩阵与升级门禁见 [docs/PERRY_COMPLIANCE.md](docs/PERRY_COMPLIANCE.md)。
+
+已知遗留：DownloadManager v5 的 getState/getQueued 仍是 stub；9 个导航页的点击巡检
+建议人工过一遍（本机仅验证了窗口渲染、输入注入与事件循环稳定性）。
 
 ## 数据流向
 
@@ -111,9 +120,10 @@ GitHub Search ─> GitHubSearchEngine ─> (search/discover 命令)    CLI list/
 - **`prepare().run(...params)` 截断**：最多 7 个参数, 超出丢弃. 解决:`extra_json` 字段聚合
 - **预编译 better-sqlite3 stub**：`prepare()` 返回 undefined. 解决: FileDB 纯 TS JSON 替代
 - **`setTimeout` 回调非 UI 线程 SIGSEGV**：解决: 自旋 sleep 同步等待（CLI 保活用 setInterval）
-- **npm stdlib 缺正则入口（1520）**：`js_regexp_new` 等 5 符号链接缺失. 解决: 升级 0.5.1665（已含）；1520 回退方案见 docs/BUILD.md 附录 A
-- **try/catch + RS4GC（1520）**：WinEH funclet 与 statepoint pass 不兼容 (#7354). 0.5.1665 已修复，默认 statepoint GC
-- **class 方法 $pshape COFF alias（1665，#14982 未修复）**：compact-map rewriter 拒绝整模块. 解决: 对象字面量工厂（GitHubAPIClient/GitHubSearchEngine/ProxyManager/SelfUpdater 已重构）
+- **npm stdlib 缺正则入口（1520）**：`js_regexp_new` 等 5 符号链接缺失. 解决: `PERRY_WORKSPACE_ROOT` 源码重建 runtime+stdlib（docs/BUILD.md §2.4）
+- **try/catch + RS4GC（1520）**：WinEH funclet 与 statepoint pass 不兼容 (#7354). 解决: `PERRY_RS4GC=0`（脚本已封装；1665 起上游修复）
+- **上游 GUI 库打包缺陷（1664/1665）**：`perry_ui_windows.lib` 内嵌第二份 runtime → `.perryat` 双 `ATOM_START` → 启动即崩（容器控件必崩）. 解决: 工具链锁 0.5.1520，升级门禁见 docs/PERRY_COMPLIANCE.md
+- **class 方法 $pshape COFF alias（#14982，1665+）**：compact-map rewriter 拒绝整模块. 1520 不触发；4 模块已预防性重构为对象字面量工厂
 - **子进程事件回调不可靠**：stdout/close 回调在真实二进制不触发. 解决: netFetch 文件轮询
 - **emoji 在字符串中**：替换为 ASCII 标识
 - **subsystem=windows 无 cmd 指令窗口**

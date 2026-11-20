@@ -3,7 +3,7 @@
 # 用法：npm run test:filedb
 set -e
 cd "$(dirname "$0")/.."
-source scripts/llvm-build-env.sh
+source scripts/perry-source-env.sh
 mkdir -p dist
 npx perry compile src/tests/filedb.test.ts -o dist/filedb-test.exe
 ./dist/filedb-test.exe

@@ -3,7 +3,7 @@
 # 用法：npm run test:release
 set -e
 cd "$(dirname "$0")/.."
-source scripts/llvm-build-env.sh
+source scripts/perry-source-env.sh
 mkdir -p dist
 npx perry compile src/tests/release.test.ts -o dist/release-test.exe
 ./dist/release-test.exe

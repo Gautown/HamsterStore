@@ -58,10 +58,10 @@ HamsterStore-GUI.exe.attest.json
 
 ## 2026-11-19 复现调查（Perry 0.5.1520 + PERRY_RS4GC=0）
 
-工作台：`src/gui/_repro.ts`（等价 bc80286 的 v2 完整接线：initDatabase +
-buildMainBody + App），配套恢复 `src/ui/`（20 文件，修复 7 处相对路径 + 导出
-runSearch；删除 2 个死代码实验文件）与 `src/core/{install,process,update}`
-（UI 组件依赖，已做 1665 合规重写，见 docs/PERRY_COMPLIANCE.md）。
+**状态：已收尾。** 工作台 `src/gui/_repro.ts` 验证通过后已提升为生产入口
+`src/gui/main.ts`（完整 Bento UI），`_repro.ts` 删除。配套 `src/ui/` 20 文件
+（修复 7 处相对路径 + 导出 runSearch）与 `src/core/{install,process,update}`
+（已做 1665 合规重写，见 docs/PERRY_COMPLIANCE.md）。
 
 ```bash
 source scripts/perry-source-env.sh
@@ -87,6 +87,43 @@ npx perry compile src/gui/_repro.ts -o dist/HamsterStore-UIRepro.exe \
 注意 DownloadManager v5 的 getState/getQueued/clearCompleted 是 stub，
 下载管理页需先补齐这些 API 才有真实状态。
 
-**2026-11-19 晚些时候：项目升级 Perry 0.5.1665**（#14982 适配：4 个 class 重构为
-对象字面量工厂）。_repro 完整 Bento UI 在 1665 默认 statepoint GC 下编译通过，
-attest 的 commit_sha 现在自动写入（git 工作树内构建）。114 断言 + e2e 下载全绿。
+**2026-11-19 晚些时候：曾升级 Perry 0.5.1665**（#14982 适配：4 个 class 重构为
+对象字面量工厂），编译全过、114 断言 + e2e 下载全绿。**但 GUI 从未在 1665 上真正
+启动过**——本次调查先用一个最小探针证伪了"升级安全"。
+
+## 2026-11-20 根因定位：1664/1665 GUI 库打包事故（上游）
+
+同日复测发现 1665 下**任何 GUI 都在用户代码前崩溃**。探针矩阵（真实二进制）：
+
+| 版本 | 纯 `Text` | `VStack(8,[Text,...])` |
+|---|---|---|
+| 0.5.1520（源码工作区重建）| 存活 | 存活 |
+| 0.5.1664（npm）| 崩溃 | 崩溃 |
+| 0.5.1665（npm）| 崩溃 | 崩溃 |
+| 0.5.1665 + 剪枝 16 个内嵌 runtime | 存活 | 崩溃 |
+
+证据链：
+
+1. `perry_ui_windows.lib`（109,223,206B / 11,417 成员）含 16 个
+   `perry_runtime-ca03e9dfe259b4d8...cgu.NN.rcgu.o` —— UI 库由**另一次独立
+   cargo 解析**构建，内嵌了第二份 runtime（runtime/stdlib 的 hash 是
+   `e05f032d...`）。
+2. Perry 链接参数 `/FORCE:MULTIPLE` + `/IGNORE:4006` 静默吞掉 9,227 条重复
+   符号 → exe 同时含两份 runtime；`.perryat` 段头出现**两个** `ATOM_START`
+   （`llvm-objdump -s` 见 `+0x0`、`+0x8` 两个 8 字节零标记，记录从 `+0x10` 开始）。
+3. `seed_static_atoms` 把整段当成 `ATOM_START+8` 起的 24 字节步长数组 → 偏移
+   8 字节 → hashbrown 常量被当指针解引用 → 用户代码前 ACCESS_VIOLATION
+   （lldb：`layout_desc::atoms::seed_static_atoms + 197`）。
+4. 剪枝缓解（删 UI 库里 16 个 runtime 成员 + `/FORCE:UNRESOLVED`）只对不碰
+   布局的 `Text` 有效：7 个泛型实例变成 image_base−1GB 的空跳板，
+   **任何容器控件一触即崩**，不能作为产品方案。
+
+**处置**：工具链锁回 0.5.1520（runtime/stdlib/UI 同一工作区构建 → 单一标记）。
+当前 `dist/HamsterStore-GUI.exe` 由 1520 构建，实机渲染 145 包/15 源，
+运行 14 分钟+ 无崩溃（后台镜像测速完成）。08-10 的
+`EXCEPTION_STACK_OVERFLOW` 与本次 seed 崩溃同属"重复 runtime 实例"族，
+但 1220 时代产物已丢失，无法逐字节归因。
+
+**仍待人工**：9 个导航页的点击巡检（perry/ui 自绘、无 UIA 可点元素；
+本次点击注入未观察到页面切换，也未崩溃）。升级 Perry 的门禁见
+docs/BUILD.md 附录 B，勿在未跑 GUI 烟测前升 1664/1665。

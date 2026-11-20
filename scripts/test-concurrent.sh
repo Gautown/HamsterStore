@@ -3,7 +3,7 @@
 # 用法：npm run test:concurrent  或  bash scripts/test-concurrent.sh
 set -e
 cd "$(dirname "$0")/.."
-source scripts/llvm-build-env.sh
+source scripts/perry-source-env.sh
 mkdir -p dist
 npx perry compile src/tests/concurrent.test.ts -o dist/concurrent-test.exe
 ./dist/concurrent-test.exe

@@ -15,6 +15,7 @@
     "test:filedb": "bash scripts/test-filedb.sh",
     "test:release": "bash scripts/test-release.sh",
     "test:net": "bash scripts/test-net.sh",
+    "test:gui": "bash scripts/test-gui-smoke.sh",
     "clean": "rm -rf dist"
   },
   "keywords": [
@@ -30,7 +31,7 @@
   "author": "HamsterStore Team",
   "license": "MIT",
   "dependencies": {
-    "@perryts/perry": "^0.5.1665"
+    "@perryts/perry": "0.5.1520"
   },
   "devDependencies": {
     "tsx": "^4.23.1"

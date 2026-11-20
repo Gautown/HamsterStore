@@ -15,6 +15,10 @@ export interface WidgetMethods {
     addChild(child: Widget): void;
     /** Remove every child widget. Equivalent to `widgetClearChildren(this)`. */
     removeAllChildren(): void;
+    /** Set the same padding on all four sides. */
+    setPadding(value: number): void;
+    /** Set per-side padding in top, left, bottom, right order. */
+    setPadding(top: number, left: number, bottom: number, right: number): void;
     /**
      * Animate the widget's opacity to `target` over `durationSecs` seconds.
      * The animation starts from the widget's current opacity.
@@ -163,7 +167,7 @@ export interface StyleProps {
 
     /** Padding. A single number applies to all four sides; an object
      *  picks per-side (top / right / bottom / left). Maps to
-     *  `widgetSetEdgeInsets`. */
+     *  `setPadding`. */
     padding?: number | {
         top?: number;
         right?: number;
@@ -226,6 +230,12 @@ export function App(config: {
     icon?: string;
     body: Widget;
     /**
+     * Quit when the final application window closes. On macOS this opts out
+     * of the usual windowless state; GTK4 and Windows already quit on close.
+     * Ignored on mobile, TV, watch, and visionOS.
+     */
+    quitOnLastWindowClose?: boolean;
+    /**
      * Initial window state. Default is `"normal"` — the window opens at
      * the requested `width`/`height`. `"maximized"` zooms the window to
      * fill the working area (taskbar/dock visible). `"fullscreen"` enters
@@ -235,6 +245,16 @@ export function App(config: {
      * Issue #1280.
      */
     windowState?: "normal" | "maximized" | "fullscreen";
+    /**
+     * Remember the desktop window frame under this stable name. Omit or use
+     * an empty string to disable. Names are scoped to the executable path;
+     * use different names for independent windows. Saved geometry takes
+     * precedence over width/height/windowState; those remain first-run defaults.
+     * macOS restores position/size via AppKit. Windows (including WinUI) also
+     * restores maximized/fullscreen state. GTK4 restores size and state; the
+     * compositor controls position. Ignored on mobile, TV, watch, and visionOS.
+     */
+    frameAutosaveName?: string;
     /**
      * Remove the window title bar and frame (borderless window, movable
      * by background). v0.4.11 launcher-style option.
@@ -807,6 +827,10 @@ export function textSetColor(widget: Widget, r: number, g: number, b: number, a:
 export function textSetFontSize(widget: Widget, size: number): void;
 export function textSetFontWeight(widget: Widget, size: number, weight: number): void;
 export function textSetFontFamily(widget: Widget, family: string): void;
+/** Set character spacing in points on a macOS or web Text label. Zero restores the default. */
+export function textSetLetterSpacing(widget: Widget, points: number): void;
+/** Set line height as a multiple of the font's natural line height on macOS or web. One restores the default. */
+export function textSetLineHeight(widget: Widget, multiple: number): void;
 export function textSetWraps(widget: Widget, maxWidth: number): void;
 export function textSetSelectable(widget: Widget, selectable: number): void;
 /**
@@ -859,9 +883,16 @@ export function textSetDecoration(widget: Widget, decoration: number): void;
 // ---------------------------------------------------------------------------
 
 export function buttonSetBordered(widget: Widget, bordered: number): void;
+/** Change a macOS button title's font family while retaining its size and weight. */
+export function buttonSetFontFamily(widget: Widget, family: string): void;
 export function buttonSetTitle(widget: Widget, title: string): void;
 export function buttonSetTextColor(widget: Widget, r: number, g: number, b: number, a: number): void;
-export function buttonSetImage(widget: Widget, symbolName: string): void;
+/**
+ * Set an SF Symbol image. A positive `pointSize` sizes it in points on Apple
+ * platforms (and pixels in the JavaScript web backend); omitting it keeps
+ * the existing default.
+ */
+export function buttonSetImage(widget: Widget, symbolName: string, pointSize?: number): void;
 export function buttonSetImagePosition(widget: Widget, position: number): void;
 export function buttonSetContentTintColor(widget: Widget, r: number, g: number, b: number, a: number): void;
 
@@ -875,6 +906,14 @@ export function widgetClearChildren(widget: Widget): void;
 export function widgetRemoveChild(parent: Widget, child: Widget): void;
 export function widgetReorderChild(widget: Widget, fromIndex: number, toIndex: number): void;
 export function widgetSetWidth(widget: Widget, width: number): void;
+/**
+ * Fill the available parent width up to maxWidth and center horizontally.
+ * The cap includes the widget's padding. May be set before or after insertion;
+ * repeated calls replace the cap. Replaces an explicit widgetSetWidth.
+ * Invalid (negative or non-finite) caps are ignored; zero is valid.
+ * Supported on macOS and Web (JS/Wasm). Currently a no-op on other backends.
+ */
+export function widgetSetMaxWidth(widget: Widget, maxWidth: number): void;
 export function widgetSetHeight(widget: Widget, height: number): void;
 export function widgetSetHugging(widget: Widget, priority: number): void;
 export function widgetSetHidden(widget: Widget, hidden: number): void;
@@ -1080,6 +1119,10 @@ export function richTextToggleBold(widget: Widget): void;
 export function richTextToggleItalic(widget: Widget): void;
 export function richTextToggleUnderline(widget: Widget): void;
 export function widgetSetControlSize(widget: Widget, size: number): void;
+/**
+ * @deprecated Use `setPadding(widget, value)` or
+ * `setPadding(widget, top, left, bottom, right)` instead.
+ */
 export function widgetSetEdgeInsets(widget: Widget, top: number, left: number, bottom: number, right: number): void;
 export function widgetSetBorderColor(widget: Widget, r: number, g: number, b: number, a: number): void;
 export function widgetSetBorderWidth(widget: Widget, width: number): void;
@@ -1164,7 +1207,10 @@ export function widgetAnimateOpacity(widget: Widget, target: number, durationSec
 /** Animate position by `(dx, dy)` pixels over `durationSecs` seconds. */
 export function widgetAnimatePosition(widget: Widget, dx: number, dy: number, durationSecs: number): void;
 
-/** Set padding (edge insets) on a widget. */
+/** Set the same padding on all four sides of a widget. */
+export function setPadding(widget: Widget, value: number): void;
+
+/** Set per-side padding in top, left, bottom, right order. */
 export function setPadding(widget: Widget, top: number, left: number, bottom: number, right: number): void;
 
 /** Set corner radius on a widget. */
@@ -1177,6 +1223,12 @@ export function setCornerRadius(widget: Widget, radius: number): void;
 export function textfieldSetString(widget: Widget, text: string): void;
 export function textfieldGetString(widget: Widget): string;
 export function textfieldFocus(widget: Widget): void;
+/** macOS: set a UTF-16 selection [start, end), or place the cursor when equal. Works before or after focus. */
+export function textfieldSetSelectionRange(widget: Widget, start: number, end: number): void;
+/** macOS: get the current or pending UTF-16 selection start. */
+export function textfieldGetSelectionStart(widget: Widget): number;
+/** macOS: get the current or pending UTF-16 selection end. */
+export function textfieldGetSelectionEnd(widget: Widget): number;
 export function textfieldBlurAll(): void;
 export function textfieldSetNextKeyView(widget: Widget, next: Widget): void;
 export function textfieldSetOnSubmit(widget: Widget, callback: () => void): void;
@@ -1914,3 +1966,15 @@ export function appSetActivationPolicy(policy: "regular" | "accessory" | "backgr
 
 /** Embed a raw NSView pointer as a widget. Advanced use only. */
 export function embedNSView(pointer: number): Widget;
+
+/** macOS appearance-adaptive colors. Components are 0–1, light RGBA first,
+ * then dark RGBA. Existing widgets update automatically when their effective
+ * appearance changes. A static setter replaces the corresponding dynamic color.
+ * These APIs currently require the native macOS backend. */
+export function widgetSetDynamicBackgroundColor(widget: Widget, lr: number, lg: number, lb: number, la: number, dr: number, dg: number, db: number, da: number): void;
+/** macOS-only light RGBA + dark RGBA; follows the widget's effective appearance. */
+export function widgetSetDynamicBorderColor(widget: Widget, lr: number, lg: number, lb: number, la: number, dr: number, dg: number, db: number, da: number): void;
+/** macOS-only light RGBA + dark RGBA; follows the widget's effective appearance. */
+export function textSetDynamicColor(widget: Widget, lr: number, lg: number, lb: number, la: number, dr: number, dg: number, db: number, da: number): void;
+/** macOS-only light RGBA + dark RGBA; follows the widget's effective appearance. */
+export function buttonSetDynamicContentTintColor(widget: Widget, lr: number, lg: number, lb: number, la: number, dr: number, dg: number, db: number, da: number): void;
