@@ -2,13 +2,17 @@
 // 竖向列表，当前选中项高亮
 
 import {
-    VStack, HStack, Text, type Widget,
+    VStack, HStack, Spacer, Text, type Widget,
     widgetMatchParentWidth, widgetSetBackgroundColor,
+    widgetSetWidth,
     setCornerRadius, setPadding,
     textSetFontSize, textSetColor,
+    textSetString,
     widgetSetOnMouseDown,
+    widgetSetOnClick,
 } from "perry/ui";
 import { COLORS, SPACING, FONT, RADIUS } from "../styles/theme";
+import { getSpec } from "../responsive";
 
 // 导航项定义
 const NAV_ITEMS = [
@@ -25,52 +29,86 @@ const NAV_ITEMS = [
 
 let _currentPage: string = "home";
 
-export function setCurrentPage(page: string): void {
-    _currentPage = page;
+interface NavItemState {
+    id: string;
+    icon: string;
+    labelText: string;
+    compact: boolean;
+    area: Widget;
+    label: Widget;
 }
 
-function NavItem(item: typeof NAV_ITEMS[0]): Widget {
-    const isActive = _currentPage === item.id;
-    const label = Text((isActive ? "› " : "  ") + item.icon + "  " + item.label);
-    textSetFontSize(label, FONT.base);
+let _navItems: NavItemState[] = [];
 
-    // 文字颜色：选中用主色，未选中用次要色
-    textSetColor(label,
-        isActive ? COLORS.primary.r : COLORS.textSecondary.r,
-        isActive ? COLORS.primary.g : COLORS.textSecondary.g,
-        isActive ? COLORS.primary.b : COLORS.textSecondary.b,
-        1.0
-    );
+function refreshNav(): void {
+    for (let i = 0; i < _navItems.length; i++) {
+        const st = _navItems[i];
+        const active = _currentPage === st.id || (_currentPage === "detail" && st.id === "packages");
+        textSetString(st.label, st.compact ? st.icon : st.icon + "  " + st.labelText);
+        textSetColor(
+            st.label,
+            active ? COLORS.primary.r : COLORS.textSecondary.r,
+            active ? COLORS.primary.g : COLORS.textSecondary.g,
+            active ? COLORS.primary.b : COLORS.textSecondary.b,
+            1.0,
+        );
+        widgetSetBackgroundColor(st.area, active ? 0.945 : COLORS.white.r, active ? 0.953 : COLORS.white.g, active ? 0.965 : COLORS.white.b, 1.0);
+        setCornerRadius(st.area, active ? RADIUS.smallCard : 0);
+    }
+}
+
+export function setCurrentPage(page: string): void {
+    _currentPage = page;
+    refreshNav();
+}
+(globalThis as any).__hamsterStoreSetNavPage = setCurrentPage;
+
+function NavItem(item: typeof NAV_ITEMS[0]): Widget {
+    const spec = getSpec();
+    const compact = spec.compact;
+    const label = Text(compact ? item.icon : item.icon + "  " + item.label);
+    textSetFontSize(label, compact ? 16 : FONT.base);
+    textSetColor(label, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
 
     const area = HStack(SPACING.md, [label]);
     widgetMatchParentWidth(area);
-    // 选中时加浅灰背景
-    if (isActive) {
-        widgetSetBackgroundColor(area, 0.945, 0.953, 0.965, 1.0);
-        setCornerRadius(area, RADIUS.smallCard);
+    // 统一白色底；选中态交给 refreshNav（单一状态源，避免多处高亮不同步）
+    widgetSetBackgroundColor(area, COLORS.white.r, COLORS.white.g, COLORS.white.b, 1.0);
+    if (compact) {
+        setPadding(area, 6, 16, 6, 16);
     } else {
-        widgetSetBackgroundColor(area, COLORS.white.r, COLORS.white.g, COLORS.white.b, 1.0);
+        setPadding(area, SPACING.sm, SPACING.md, SPACING.sm, SPACING.md);
     }
-    setPadding(area, SPACING.sm, SPACING.md, SPACING.sm, SPACING.md);
-    widgetSetOnMouseDown(area, () => {
+    const activate = () => {
+        if (item.id === "home" || item.id === "packages") {
+            (globalThis as any).__hamsterStoreCategory = null;
+            (globalThis as any).__hamsterStoreSourceId = 0;
+        }
         _currentPage = item.id;
         // 通知 AppLayout 更新内容区
         (globalThis as any).__hamsterStoreNavigate && (globalThis as any).__hamsterStoreNavigate(item.id);
-    });
+    };
+    widgetSetOnMouseDown(area, activate);
+    widgetSetOnClick(label, activate);
 
+    _navItems.push({ id: item.id, icon: item.icon, labelText: item.label, compact: compact, area: area, label: label });
     return area;
 }
 
 export function SideNav(): Widget {
+    const spec = getSpec();
     const items: Widget[] = [];
+    _navItems = [];
     for (const item of NAV_ITEMS) {
         items.push(NavItem(item));
     }
+    refreshNav();
 
+    items.push(Spacer());
     const nav = VStack(SPACING.xs, items);
-    widgetMatchParentWidth(nav);
+    widgetSetWidth(nav, spec.sidebar);
     widgetSetBackgroundColor(nav, COLORS.white.r, COLORS.white.g, COLORS.white.b, 1.0);
-    setPadding(nav, SPACING.sm, 0, SPACING.sm, 0);
+    setPadding(nav, spec.compact ? 4 : SPACING.sm, 0, SPACING.sm, 0);
 
     return nav;
 }

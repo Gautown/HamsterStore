@@ -379,6 +379,12 @@ export class FileDB {
         return { all: () => [], get: () => undefined, run: () => ({ changes: 0 }) };
     }
 
+    // 直接读取行数组：绕开 prepare().get()（Windows GUI 构建下会原生崩溃）
+    public getRows(tableName: string): any[] {
+        const t = this.tables[tableName];
+        return t ? t.rows : [];
+    }
+
     private _save(tableName: string): void {
         const t = this.tables[tableName];
         if (!t) return;

@@ -2,7 +2,7 @@
 // 特性：实时速度、重试失败任务、打开文件/文件夹、状态颜色区分
 
 import {
-    VStack, HStack, Text, Button, Divider, type Widget,
+    VStack, HStack, Text, Button, Divider, Spacer, type Widget,
     widgetMatchParent, widgetMatchParentWidth, widgetSetBackgroundColor,
     setCornerRadius, setPadding, widgetSetOnMouseDown,
     textSetFontSize, textSetColor,
@@ -119,6 +119,7 @@ export function DownloadsPage(): Widget {
     ]);
     children.push(btnRow);
 
+    children.push(Spacer());
     const container = VStack(SPACING.sm, children);
     widgetMatchParentWidth(container);
     widgetSetBackgroundColor(container, COLORS.bg.r, COLORS.bg.g, COLORS.bg.b, 1.0);
@@ -161,7 +162,7 @@ function buildActiveCard(st: any): Widget {
     textSetFontSize(retryBtn, FONT.xs);
 
     const row = HStack(SPACING.sm, [nameW]);
-    const infoRow = HStack(SPACING.sm, [progressW, retryBtn]);
+    const infoRow = HStack(SPACING.sm, [progressW, retryBtn, Spacer()]);
     const card = VStack(SPACING.xs, [row, infoRow, detailW]);
     widgetMatchParentWidth(card);
     widgetSetBackgroundColor(card, COLORS.bgCard.r, COLORS.bgCard.g, COLORS.bgCard.b, 1.0);
@@ -212,7 +213,7 @@ function buildFailedCard(task: any): Widget {
     });
     textSetFontSize(deleteBtn, FONT.xs);
 
-    const actionRow = HStack(SPACING.sm, [retryBtn, deleteBtn]);
+    const actionRow = HStack(SPACING.sm, [retryBtn, deleteBtn, Spacer()]);
     const card = VStack(SPACING.xs, [nameW, actionRow]);
     widgetMatchParentWidth(card);
     widgetSetBackgroundColor(card, COLORS.error.r, COLORS.error.g, COLORS.error.b, 0.05);
@@ -241,7 +242,7 @@ function buildDoneCard(task: any): Widget {
     });
     textSetFontSize(deleteBtn, FONT.xs);
 
-    const actionRow = HStack(SPACING.sm, [openBtn, deleteBtn]);
+    const actionRow = HStack(SPACING.sm, [openBtn, deleteBtn, Spacer()]);
     const statusW = Text(task.status + " " + task.progress + "%");
     textSetFontSize(statusW, FONT.xs);
     textSetColor(statusW, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);

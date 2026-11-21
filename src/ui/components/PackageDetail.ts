@@ -1,6 +1,6 @@
 // PackageDetail — 软件详情页面（增强版）
 import {
-    VStack, HStack, Text, Button, Divider, type Widget,
+    VStack, HStack, Spacer, Text, Button, Divider, type Widget,
     widgetMatchParentWidth, widgetSetBackgroundColor,
     setCornerRadius, setPadding,
     textSetFontSize, textSetColor,
@@ -82,7 +82,7 @@ export function PackageDetail(packageId: number): Widget {
         (globalThis as any).__hamsterStoreNavigate && (globalThis as any).__hamsterStoreNavigate("packages");
     });
     
-    const buttonRow = HStack(SPACING.sm, [backBtn, openBtn]);
+    const buttonRow = HStack(SPACING.sm, [backBtn, openBtn, Spacer()]);
     
     // 组装
     const container = VStack(SPACING.md, [
@@ -95,7 +95,7 @@ export function PackageDetail(packageId: number): Widget {
         Divider(),
         ...infoRows,
         Divider(),
-        buttonRow,
+        buttonRow, Spacer(),
     ]);
     
     widgetMatchParentWidth(container);
@@ -124,5 +124,5 @@ function createInfoRow(label: string, value: string): Widget {
     textSetFontSize(valueW, FONT.sm);
     textSetColor(valueW, COLORS.text.r, COLORS.text.g, COLORS.text.b, 1.0);
     
-    return HStack(SPACING.sm, [labelW, valueW]);
+    return HStack(SPACING.sm, [labelW, valueW, Spacer()]);
 }

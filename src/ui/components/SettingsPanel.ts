@@ -3,13 +3,13 @@
 // Perry v0.5.1220: 内联颜色常量，避免 theme.ts 导入链问题
 
 import {
-    VStack, HStack, Text, Button, TextField, Divider, type Widget,
+    VStack, HStack, Spacer, Text, Button, TextField, Divider, type Widget,
     textfieldGetString, textfieldSetString,
     widgetMatchParentWidth,
     widgetSetBackgroundColor, setPadding,
     textSetFontSize, textSetColor,
 } from "perry/ui";
-import { SettingRepository } from "../../data";
+import { SettingRepository } from "../../data/repositories/SettingRepository";
 import { ProxyManager } from "../../core/proxy/ProxyManager";
 
 const COLORS = {
@@ -46,7 +46,6 @@ export function SettingsPanel(): Widget {
         const val = textfieldGetString(tokenInput);
         SettingRepository.setValue("github_token", val);
     });
-
     // 当前加速状态（实时读取 ProxyManager）
     const pm = ProxyManager.getInstance();
     const pmStatus = pm.getStatus();
@@ -71,7 +70,7 @@ export function SettingsPanel(): Widget {
     const statusColor = pmStatus.connected ? COLORS.success : COLORS.warning;
     textSetColor(statusText, statusColor.r, statusColor.g, statusColor.b, 1.0);
 
-    const versionText = Text("HamsterStore v1.0.0 - Perry v0.5.1220");
+    const versionText = Text("HamsterStore v1.0.0 - Perry v0.5.1520");
     textSetFontSize(versionText, FONT.xs);
     textSetColor(versionText, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
 
@@ -79,9 +78,9 @@ export function SettingsPanel(): Widget {
         title, Divider(),
         tokenLabel, tokenInput, tokenStatus, saveBtn,
         Divider(),
-        proxyLabel, HStack(SPACING.sm, [proxyToggle, retestBtn]), statusText,
+        proxyLabel, HStack(SPACING.sm, [proxyToggle, retestBtn, Spacer()]), statusText,
         Divider(),
-        versionText,
+        versionText, Spacer(),
     ]);
 
     widgetMatchParentWidth(container);

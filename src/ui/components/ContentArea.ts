@@ -1,10 +1,10 @@
-// ContentArea — 右侧内容区域（全屏沉浸式）
-// 根据当前页面动态渲染内容
-
+// ContentArea — right content region (responsive)
+// Page content is wrapped in a ScrollView so small window heights still work.
 import {
-    VStack, type Widget,
-    widgetMatchParentWidth, widgetSetBackgroundColor,
-    setPadding, Text,
+    VStack, ScrollView, Text, type Widget,
+    widgetAddChild, widgetMatchParentWidth, widgetSetBackgroundColor,
+    widgetSetHeight, widgetSetHidden, scrollviewSetChild,
+    setPadding, textSetFontSize, textSetColor,
 } from "perry/ui";
 import { COLORS, SPACING, FONT } from "../styles/theme";
 import { PackageList } from "./PackageList";
@@ -15,78 +15,119 @@ import { DownloadsPage, setRebuildBody as setDownloadRebuild } from "./DownloadM
 import { DedupReportPage, setRebuildBody as setDedupRebuild } from "./DedupReport";
 import { CategoryBrowser } from "./CategoryBrowser";
 import { PackageDetail } from "./PackageDetail";
-import { PackageRepository, SourceRepository } from "../../data";
-import { buildHomePage, navigateToDetail } from "../app";
+import { SourceRepository } from "../../data";
+import { buildHomePage } from "../app";
+import { getSpec, mainRowHeight } from "../responsive";
 
 let _currentPage: string = "home";
+let _host: Widget | null = null;
+let _sv: Widget | null = null;
+let _pages: Record<string, Widget> = {};
+let _widgets: Widget[] = [];
 
-export function setCurrentPage(page: string): void {
-    _currentPage = page;
+function pageKey(page: string): string {
+    if (page === "packages") {
+        const cat = (globalThis as any).__hamsterStoreCategory || "";
+        const src = (globalThis as any).__hamsterStoreSourceId || 0;
+        const q = (globalThis as any).__hamsterStoreQuery || "";
+        return "packages|" + cat + "|" + src + "|" + q;
+    }
+    if (page === "detail") {
+        return "detail|" + ((globalThis as any).__hamsterStoreDetailId || 0);
+    }
+    return page;
 }
 
-export function ContentArea(): Widget {
-    const page = _currentPage;
-    const pkgListFilter = {
-        category: (globalThis as any).__hamsterStoreCategory || null,
-        sourceId: (globalThis as any).__hamsterStoreSourceId || 0,
-        query: (globalThis as any).__hamsterStoreQuery || "",
-    };
-
-    let content: Widget;
+function buildPage(page: string): Widget | null {
     switch (page) {
         case "packages":
-            content = PackageList(pkgListFilter);
-            break;
+            return PackageList({
+                category: (globalThis as any).__hamsterStoreCategory || null,
+                sourceId: (globalThis as any).__hamsterStoreSourceId || 0,
+                query: (globalThis as any).__hamsterStoreQuery || "",
+            });
         case "featured":
-            content = buildFeaturedPage();
-            break;
+            return buildFeaturedPage();
         case "categories":
-            content = CategoryBrowser((catId) => {
+            return CategoryBrowser((catId) => {
                 (globalThis as any).__hamsterStoreCategory = catId || null;
                 (globalThis as any).__hamsterStoreSourceId = 0;
-                _currentPage = "packages";
+                const nav = (globalThis as any).__hamsterStoreNavigate;
+                if (typeof nav === "function") nav("packages");
             });
-            break;
         case "downloads":
             setDownloadRebuild(() => { /* handled globally */ });
-            content = DownloadsPage();
-            break;
+            return DownloadsPage();
         case "dedup":
             setDedupRebuild(() => { /* handled globally */ });
-            content = DedupReportPage();
-            break;
+            return DedupReportPage();
         case "installed":
-            content = InstalledList();
-            break;
+            return InstalledList();
         case "updates":
-            content = UpdateCenter();
-            break;
+            return UpdateCenter();
         case "settings":
-            content = SettingsPanel();
-            break;
+            return SettingsPanel();
         case "detail":
-            content = PackageDetail(selectedPackageId);
-            break;
+            return PackageDetail((globalThis as any).__hamsterStoreDetailId || selectedPackageId);
         default:
-            content = buildHomePage();
+            return buildHomePage();
     }
+}
 
-    const container = VStack(0, [content]);
+// 切页：旧页只隐藏不销毁（0.5.1520 Windows 销毁控件会 AV），新页首次访问时构建
+export function setCurrentPage(page: string): void {
+    _currentPage = page;
+    if (!_host) return;
+    const key = pageKey(page);
+    let target: Widget | null = _pages[key] || null;
+    if (!target) {
+        target = buildPage(page) || Text("页面构建失败");
+        _pages[key] = target;
+        _widgets.push(target);
+        widgetAddChild(_host, target);
+    }
+    for (let i = 0; i < _widgets.length; i++) {
+        widgetSetHidden(_widgets[i], _widgets[i] === target ? 0 : 1);
+    }
+    if (_sv) scrollviewSetChild(_sv, _host);
+}
+(globalThis as any).__hamsterStoreSetContentPage = setCurrentPage;
+
+export function ContentArea(): Widget {
+    _pages = {};
+    _widgets = [];
+    const host = VStack(0, []);
+    widgetMatchParentWidth(host);
+    _host = host;
+
+    const first = buildPage(_currentPage) || Text("页面构建失败");
+    _pages[pageKey(_currentPage)] = first;
+    _widgets.push(first);
+    widgetAddChild(host, first);
+
+    const spec = getSpec();
+    const sv = ScrollView();
+    _sv = sv;
+    scrollviewSetChild(sv, host);
+    widgetMatchParentWidth(sv);
+    widgetSetHeight(sv, Math.max(160, mainRowHeight() - spec.pagePad * 2));
+
+    const container = VStack(0, [sv]);
     widgetMatchParentWidth(container);
     widgetSetBackgroundColor(container, COLORS.bg.r, COLORS.bg.g, COLORS.bg.b, 1.0);
-    setPadding(container, SPACING.md, SPACING.md, SPACING.md, SPACING.md);
+    setPadding(container, spec.pagePad, spec.pagePad, spec.pagePad, spec.pagePad);
 
     return container;
 }
 
 let selectedPackageId: number = 0;
 
-// 暴露给 PackageList 点击跳转
+// exposed for PackageList click-through
 export function setSelectedPackageId(id: number): void {
     selectedPackageId = id;
 }
 
-// 精选推荐页面
+// featured page
 function buildFeaturedPage(): Widget {
     const sources = SourceRepository.getAll();
     const items: Widget[] = [];

@@ -54,6 +54,18 @@ FileDB、DedupEngine、DedupCleaner、ThreadPool、TaskQueue、Channel、
 AtomicCounter、RateLimiter、HamsterProxy、SourceSyncer（+测试 Scorer）。
 1520 无 #14982 限制；1665+ 前需评估（方法体形状未产生同 body alias 即安全）。
 
+## Windows GUI 后端实测坑（0.5.1520，2026-11 复验）
+
+1. `prepare(...).get(key)` 在 GUI 二进制里 AV（同一代码 CLI 正常）→ SettingRepository
+   读取改走 `FileDB.getRows()` 内存扫描，写操作仍用 `run()`。
+2. **已创建的 Win32 控件不能销毁**：`widgetClearChildren` / 关窗后重建会 AV。
+   布局刷新、切页一律“隐藏旧树 + 追加新树”（`widgetSetHidden`），进程内只增不减。
+3. `spawn(..., { detached: true })` 的子进程会在下一轮被回收（长驻探测秒退）→
+   去掉 detached，并在模块级持有 ChildProcess 引用防 GC。
+4. `appSetTimer(interval, cb)` 在 GUI 下未观察到回调触发 → 尺寸轮询改用 `setInterval`。
+5. 隐藏控件的实现是移到离屏坐标（约 -9800,-9900），枚举子窗口仍能看到；
+   判断可见性要看窗口矩形，不能看是否存在。
+
 ## 新增代码合规清单
 
 - [ ] 不用 class 封装带 GC roots 的方法（闭包/网络回调/字符串字段）→ 工厂 + 对象字面量

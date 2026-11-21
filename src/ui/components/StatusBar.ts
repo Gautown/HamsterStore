@@ -1,11 +1,13 @@
 // StatusBar — 底部状态栏
 // 显示真实代理状态、软件包总数、版本信息
 import {
-    HStack, Text, type Widget,
+    HStack, Spacer, Text, type Widget,
     widgetSetBackgroundColor, widgetMatchParentWidth,
+    widgetSetHeight,
     setPadding,
     textSetFontSize, textSetColor,
 } from "perry/ui";
+import { getSpec, STATUSBAR_H } from "../responsive";
 // Perry v0.5.1220: 内联颜色常量
 const COLORS = {
     white: { r: 1.0, g: 1.0, b: 1.0 },
@@ -45,8 +47,13 @@ export function StatusBar(): Widget {
     textSetFontSize(versionText, FONT.xs);
     textSetColor(versionText, COLORS.textSecondary.r, COLORS.textSecondary.g, COLORS.textSecondary.b, 1.0);
 
-    const row = HStack(SPACING.lg, [proxyText, versionText]);
+    const spec = getSpec();
+    const items: Widget[] = [proxyText, Spacer()];
+    if (!spec.compact) items.push(versionText);
+
+    const row = HStack(SPACING.lg, items);
     widgetMatchParentWidth(row);
+    widgetSetHeight(row, STATUSBAR_H);
     widgetSetBackgroundColor(row, COLORS.white.r, COLORS.white.g, COLORS.white.b, 1.0);
     setPadding(row, SPACING.xs, SPACING.md, SPACING.xs, SPACING.md);
 

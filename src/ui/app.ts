@@ -2,10 +2,11 @@
 // 顶部标题栏 + 左侧导航 + 右侧内容区
 
 import {
-    HStack, VStack, Text, Button, Divider, type Widget,
+    HStack, VStack, Text, Button, Divider, Spacer, type Widget,
     widgetAddChild, widgetClearChildren, widgetMatchParentWidth,
+    widgetSetWidth,
     widgetSetBackgroundColor, setPadding, setCornerRadius,
-    textSetFontSize, textSetColor, onFrame,
+    textSetFontSize, textSetColor, onFrame, widgetSetOnMouseDown,
 } from "perry/ui";
 
 // Perry v0.5.1220: 内联颜色常量，避免导入链问题
@@ -40,6 +41,7 @@ import { CategoryBrowser } from "./components/CategoryBrowser";
 import { PackageDetail } from "./components/PackageDetail";
 import { PackageRepository, InstallationRepository, DownloadRepository, SourceRepository } from "../data";
 import { CATEGORY_TREE } from "../core/categorization/CategoryEngine";
+import { getSpec, contentWidth, gridCardWidth } from "./responsive";
 import { DownloadManager } from "../core/download/DownloadManager";
 import { dedupCleaner } from "../core/dedup/DedupCleaner";
 
@@ -71,11 +73,12 @@ const defineGlobal = (name: string, value: any): void => {
 // 暴露给 SideNav 和 ContentArea 的导航函数
 defineGlobal("__hamsterStoreNavigate", function(pageId: string): void {
     currentPage = pageId;
-    if (pageId === "home" || pageId === "packages") {
-        selectedCategory = null;
-        selectedSourceId = 0;
-    }
-    rebuildContent();
+    defineGlobal("__hamsterStoreCurrentPage", currentPage);
+    // 只切换可见性：SideNav 改高亮，ContentArea 换页面（均为 show/hide，不销毁控件）
+    const setNav = (globalThis as any).__hamsterStoreSetNavPage;
+    if (typeof setNav === "function") setNav(pageId);
+    const setContent = (globalThis as any).__hamsterStoreSetContentPage;
+    if (typeof setContent === "function") setContent(pageId);
 });
 
 defineGlobal("__hamsterStoreCategory", null);
@@ -105,9 +108,9 @@ function rebuildContent(): void {
 export function navigateToDetail(packageId: number): void {
     selectedPackageId = packageId;
     currentPage = "detail";
-    rebuildContent();
-    // 设置详情页面
-    defineGlobal("__hamsterStoreDetailPage", PackageDetail(packageId));
+    defineGlobal("__hamsterStoreDetailId", packageId);
+    const nav = (globalThis as any).__hamsterStoreNavigate;
+    if (typeof nav === "function") nav("detail");
 }
 
 // 暴露给 TitleBar 使用
@@ -120,7 +123,9 @@ export function runSearch(query: string): void {
     selectedSourceId = 0;
     currentPage = "packages";
     defineGlobal("__hamsterStoreQuery", searchQuery);
-    rebuildContent();
+    defineGlobal("__hamsterStoreCurrentPage", currentPage);
+    const nav = (globalThis as any).__hamsterStoreNavigate;
+    if (typeof nav === "function") nav("packages");
 }
 
 // === §6.2 首页 Bento Grid 布局 ===
@@ -136,24 +141,33 @@ export function buildHomePage(): Widget {
     const downloads = safeCount(() => DownloadRepository.getAll());
     console.log("[buildHomePage] Downloads:", downloads);
 
+    const spec = getSpec();
+    const cw = contentWidth();
+    const cardW = gridCardWidth(spec.columns, spec.gap);
+    const midW = gridCardWidth(spec.midColumns, spec.gap);
+    const previewW = gridCardWidth(spec.previewColumns, SPACING.sm);
+
     // 第一行：统计卡片
     console.log("[buildHomePage] Building statCard...");
     const statCard = BentoCard({
         title: "软件统计",
         subtitle: "已安装: " + installed + " | 可更新: " + updatable + " | 软件源: " + sources + " 个",
         size: "large",
+        width: cardW,
     });
 
     const hotCard = BentoCard({
         title: "热门推荐",
         subtitle: pkgs.length > 0 ? pkgs[0].name : "暂无",
         size: "small",
+        width: cardW,
     });
 
     const updateCard = BentoCard({
         title: "更新提醒",
         subtitle: updatable + " 个待更新 | 下载: " + downloads,
         size: "small",
+        width: cardW,
     });
 
     // 下载管理快捷入口
@@ -161,6 +175,7 @@ export function buildHomePage(): Widget {
         title: "下载管理",
         subtitle: "运行中: " + DownloadManager.getActive().length + " | 队列: " + DownloadManager.getQueued().length,
         size: "small",
+        width: cardW,
         bgColor: { r: COLORS.primary.r, g: COLORS.primary.g, b: COLORS.primary.b },
         onPress: () => { (globalThis as any).__hamsterStoreNavigate("downloads"); },
     });
@@ -175,11 +190,12 @@ export function buildHomePage(): Widget {
         title: "去重报告",
         subtitle: dedupReport,
         size: "small",
+        width: cardW,
         bgColor: { r: COLORS.warning.r, g: COLORS.warning.g, b: COLORS.warning.b },
         onPress: () => { (globalThis as any).__hamsterStoreNavigate("dedup"); },
     });
 
-    const topRow = BentoGrid([statCard, hotCard, updateCard, dlCard, dedupCard], { columns: 5, spacing: SPACING.md });
+    const topRow = BentoGrid([statCard, hotCard, updateCard, dlCard, dedupCard], { columns: spec.columns, spacing: spec.gap, width: cw });
 
     // 第二行：精选推荐 + 分类浏览
     const sourcesList = SourceRepository.getAll();
@@ -191,6 +207,7 @@ export function buildHomePage(): Widget {
     const featuredCard = BentoCard({
         title: "精选推荐（来自种子仓库）",
         size: "medium",
+        width: midW,
     }, seedLines);
 
     const catKeys = Object.keys(CATEGORY_TREE).slice(0, 6);
@@ -202,9 +219,10 @@ export function buildHomePage(): Widget {
     const catCard = BentoCard({
         title: "分类浏览",
         size: "medium",
+        width: midW,
     }, catLabels);
 
-    const midRow = BentoGrid([featuredCard, catCard], { columns: 2, spacing: SPACING.md });
+    const midRow = BentoGrid([featuredCard, catCard], { columns: spec.midColumns, spacing: spec.gap, width: cw });
 
     // 第三行：搜索提示
     const searchBar = Text("提示: 使用顶部搜索框检索 " + pkgs.length + " 个软件");
@@ -221,15 +239,16 @@ export function buildHomePage(): Widget {
             title: name,
             subtitle: (p.description || "").substring(0, 50),
             size: "small",
+            width: previewW,
         }));
     }
 
-    const previewGrid = pkgPreview.length > 0 ? BentoGrid(pkgPreview, { columns: 4, spacing: SPACING.sm }) : buildSeedLine("暂无软件包 — 运行 sync 同步获取");
+    const previewGrid = pkgPreview.length > 0 ? BentoGrid(pkgPreview, { columns: spec.previewColumns, spacing: SPACING.sm, width: cw }) : buildSeedLine("暂无软件包 — 运行 sync 同步获取");
 
-    const container = VStack(SPACING.md, [topRow, midRow, searchBar, previewGrid]);
+    const container = VStack(spec.gap, [topRow, midRow, searchBar, previewGrid, Spacer()]);
     widgetMatchParentWidth(container);
     widgetSetBackgroundColor(container, COLORS.bg.r, COLORS.bg.g, COLORS.bg.b, 1.0);
-    setPadding(container, SPACING.md, SPACING.md, SPACING.md, SPACING.md);
+    setPadding(container, 0, 0, 0, 0);
     return container;
 }
 
@@ -245,7 +264,9 @@ function buildFeaturedPage(): Widget {
             selectedSourceId = sourceId;
             currentPage = "packages";
             defineGlobal("__hamsterStoreSourceId", sourceId);
-            rebuildContent();
+            defineGlobal("__hamsterStoreCategory", null);
+            const nav = (globalThis as any).__hamsterStoreNavigate;
+            if (typeof nav === "function") nav("packages");
         });
         btns.push(btn);
     }
@@ -256,9 +277,9 @@ function buildFeaturedPage(): Widget {
         size: "large",
     }, btns);
 
-    const container = VStack(SPACING.md, [card]);
+    const container = VStack(SPACING.md, [card, Spacer()]);
     widgetMatchParentWidth(container);
-    setPadding(container, SPACING.md, SPACING.md, SPACING.md, SPACING.md);
+    setPadding(container, 0, 0, 0, 0);
     return container;
 }
 
@@ -294,7 +315,7 @@ function safeCount(fn: () => any[]): number {
 }
 
 // === BentoCard 和 BentoGrid 内联（避免循环依赖）===
-export function BentoCard(options: { title?: string; subtitle?: string; badge?: string; icon?: string; size?: "large" | "medium" | "small"; bgColor?: { r: number; g: number; b: number }; onPress?: () => void }, children: Widget[] = []): Widget {
+export function BentoCard(options: { title?: string; subtitle?: string; badge?: string; icon?: string; size?: "large" | "medium" | "small"; bgColor?: { r: number; g: number; b: number }; width?: number; onPress?: () => void }, children: Widget[] = []): Widget {
     const title = options.title;
     const subtitle = options.subtitle;
     const size = options.size || "medium";
@@ -324,26 +345,39 @@ export function BentoCard(options: { title?: string; subtitle?: string; badge?: 
     const card = VStack(SPACING.sm, contentWidgets);
     widgetSetBackgroundColor(card, bg.r, bg.g, bg.b, 1.0);
     widgetMatchParentWidth(card);
+    if (options.width && options.width > 0) widgetSetWidth(card, options.width);
     setCornerRadius(card, rd);
     setPadding(card, padding, padding, padding, padding);
 
     if (options.onPress) {
-        // 注意：perry 中 Button.onPress 不可靠，用 widgetSetOnMouseDown
-        // 但 BentoCard 是 VStack，无法直接绑定鼠标事件
-        // 这里暂时不做点击处理，由调用方自己处理
+        widgetSetOnMouseDown(card, options.onPress);
+        for (let i = 0; i < contentWidgets.length; i++) {
+            widgetSetOnMouseDown(contentWidgets[i], options.onPress);
+        }
     }
 
     return card;
 }
 
-export function BentoGrid(items: Widget[], options: { columns?: number; spacing?: number } = {}): Widget {
-    const cols = options.columns || 3;
+export function BentoGrid(items: Widget[], options: { columns?: number; spacing?: number; width?: number } = {}): Widget {
+    const cols = Math.max(1, options.columns || 3);
     const gap = options.spacing || SPACING.md;
     const rows: Widget[] = [];
 
+    // 单元格宽度：铺满 width（或内容区），最后一行不足 cols 时仍保持同宽
+    const totalW = options.width && options.width > 0 ? options.width : contentWidth();
+    const itemW = Math.max(120, Math.floor((totalW - gap * (cols - 1)) / cols));
+
     for (let i = 0; i < items.length; i += cols) {
         const slice = items.slice(i, i + cols);
-        const row = HStack(gap, slice);
+        for (let c = 0; c < slice.length; c++) {
+            widgetSetWidth(slice[c], itemW);
+        }
+        const rowKids: Widget[] = [];
+        for (let c = 0; c < slice.length; c++) rowKids.push(slice[c]);
+        // 末尾 Spacer 吸收余量，防止布局引擎把最后一张卡拉伸到剩余宽度
+        rowKids.push(Spacer());
+        const row = HStack(gap, rowKids);
         widgetMatchParentWidth(row);
         rows.push(row);
     }

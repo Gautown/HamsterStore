@@ -1,7 +1,7 @@
 // DedupReport — 去重报告 UI 组件
 
 import {
-    VStack, HStack, Text, Button, Divider, type Widget,
+    VStack, HStack, Spacer, Text, Button, Divider, type Widget,
     widgetMatchParentWidth, widgetSetBackgroundColor,
     setCornerRadius, setPadding,
     textSetFontSize, textSetColor,
@@ -127,6 +127,7 @@ export function DedupReportPage(): Widget {
     }
 
     const container = VStack(SPACING.sm, children);
+    children.push(Spacer());
     widgetMatchParentWidth(container);
     widgetSetBackgroundColor(container, COLORS.bg.r, COLORS.bg.g, COLORS.bg.b, 1.0);
     setPadding(container, SPACING.md, SPACING.md, SPACING.md, SPACING.md);

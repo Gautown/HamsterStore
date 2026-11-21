@@ -1,6 +1,6 @@
 // PackageList — Bento 风格软件卡片列表（增强版）
 import {
-    VStack, HStack, Text, Button, type Widget,
+    VStack, HStack, Spacer, Text, Button, type Widget,
     widgetMatchParentWidth, widgetSetBackgroundColor,
     setCornerRadius, setPadding,
     textSetFontSize, textSetColor,
@@ -103,9 +103,9 @@ export function PackageList(filter: PackageListFilter = {}): Widget {
                 DownloadManager.openInBrowser(url);
             });
             
-            const btnRow = HStack(SPACING.xs, [detailBtn, openBtn]);
+            const btnRow = HStack(SPACING.xs, [detailBtn, openBtn, Spacer()]);
             
-            const row = HStack(SPACING.sm, [nameW, catW]);
+            const row = HStack(SPACING.sm, [nameW, catW, Spacer()]);
             widgetMatchParentWidth(row);
             
             const card = VStack(SPACING.xs, [row, descW, btnRow]);
@@ -122,6 +122,7 @@ export function PackageList(filter: PackageListFilter = {}): Widget {
     for (let i = 0; i < rows.length; i++) {
         allWidgets.push(rows[i]);
     }
+    allWidgets.push(Spacer());
     const container = VStack(SPACING.sm, allWidgets);
     widgetMatchParentWidth(container);
     setPadding(container, SPACING.md, SPACING.md, SPACING.md, SPACING.md);

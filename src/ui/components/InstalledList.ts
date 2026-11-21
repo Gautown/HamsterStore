@@ -2,7 +2,7 @@
 // 开发文档 §6.4 已安装页面
 
 import {
-    VStack, HStack, Text, Button, type Widget,
+    VStack, HStack, Spacer, Text, Button, type Widget,
     widgetMatchParentWidth, widgetSetBackgroundColor,
     setCornerRadius, setPadding,
     textSetFontSize, textSetColor,
@@ -60,7 +60,7 @@ export function InstalledList(): Widget {
                 InstallManager.uninstall(targetId);
             });
 
-        const row = HStack(SPACING.sm, [nameW, versionW, dateW, launchBtn, uninstallBtn]);
+        const row = HStack(SPACING.sm, [nameW, versionW, dateW, launchBtn, uninstallBtn, Spacer()]);
         widgetMatchParentWidth(row);
 
         const card = VStack(SPACING.xs, [row]);
@@ -72,6 +72,7 @@ export function InstalledList(): Widget {
         cards.push(card);
     }
 
+    cards.push(Spacer());
     const container = VStack(SPACING.md, cards);
     widgetMatchParentWidth(container);
     widgetSetBackgroundColor(container, COLORS.bg.r, COLORS.bg.g, COLORS.bg.b, 1.0);

@@ -2,7 +2,7 @@
 // 开发文档 §6.4：集中展示软件包更新和应用自身更新
 
 import {
-    VStack, HStack, Text, Button, type Widget,
+    VStack, HStack, Spacer, Text, Button, type Widget,
     widgetMatchParentWidth, widgetSetBackgroundColor,
     setCornerRadius, setPadding,
     textSetFontSize, textSetColor,
@@ -62,7 +62,7 @@ export function UpdateCenter(): Widget {
                             }
                         });
 
-            sections.push(HStack(SPACING.sm, [nameW, oldVer, updateBtn]));
+            sections.push(HStack(SPACING.sm, [nameW, oldVer, updateBtn, Spacer()]));
         }
     }
 
@@ -90,6 +90,7 @@ export function UpdateCenter(): Widget {
     });
     sections.push(checkBtn);
 
+    sections.push(Spacer());
     const container = VStack(SPACING.md, sections);
     widgetMatchParentWidth(container);
     widgetSetBackgroundColor(container, COLORS.bg.r, COLORS.bg.g, COLORS.bg.b, 1.0);

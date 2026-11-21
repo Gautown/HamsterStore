@@ -1,12 +1,14 @@
 // CategoryBrowser — 分类浏览器（树形结构）
 import {
-    VStack, HStack, Text, Button, type Widget,
+    VStack, HStack, Spacer, Text, Button, type Widget,
     widgetMatchParentWidth, widgetSetBackgroundColor,
+    widgetSetWidth,
     setPadding, setCornerRadius,
     textSetFontSize, textSetColor,
 } from "perry/ui";
 import { COLORS, SPACING, FONT, RADIUS } from "../styles/theme";
 import { PackageRepository } from "../../data";
+import { getSpec, gridCardWidth } from "../responsive";
 
 interface CategoryNode {
     id: string;
@@ -62,7 +64,7 @@ export function CategoryBrowser(onSelect: (catId: string) => void): Widget {
     
     const grid = createButtonGrid(btns);
     
-    const container = VStack(SPACING.md, [header, grid]);
+    const container = VStack(SPACING.md, [header, grid, Spacer()]);
     widgetMatchParentWidth(container);
     widgetSetBackgroundColor(container, COLORS.bg.r, COLORS.bg.g, COLORS.bg.b, 1.0);
     
@@ -90,15 +92,23 @@ function createCatButton(cat: CategoryNode, onSelect: (catId: string) => void): 
 }
 
 function createButtonGrid(btns: Widget[]): Widget {
-    const cols = 4;
+    const spec = getSpec();
+    const cols = Math.max(1, spec.categoryColumns);
+    const cellW = gridCardWidth(cols, SPACING.sm);
     const rows: Widget[] = [];
-    
+
     for (let i = 0; i < btns.length; i += cols) {
-        const rowBtns = btns.slice(i, i + cols);
-        const row = HStack(SPACING.sm, rowBtns);
+        const slice = btns.slice(i, i + cols);
+        for (let c = 0; c < slice.length; c++) {
+            widgetSetWidth(slice[c], cellW);
+        }
+        const rowKids: Widget[] = [];
+        for (let c = 0; c < slice.length; c++) rowKids.push(slice[c]);
+        rowKids.push(Spacer());
+        const row = HStack(SPACING.sm, rowKids);
         widgetMatchParentWidth(row);
         rows.push(row);
     }
-    
+
     return VStack(SPACING.xs, rows);
 }
